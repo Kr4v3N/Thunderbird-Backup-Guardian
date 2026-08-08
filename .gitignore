@@ -1,0 +1,17 @@
+# Secrets et variables d'environnement
+.env
+.env.*
+!.env.example
+
+# Environnement virtuel
+.venv/
+
+# Config IDE locale (chemins machine-spécifiques)
+.idea/
+
+# Logs (non maîtrisés, régénérés à chaque run, peuvent devenir volumineux)
+*.log
+
+# Artefacts Python régénérables
+__pycache__/
+*.pyc
