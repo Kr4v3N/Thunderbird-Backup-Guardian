@@ -366,7 +366,7 @@ echo ""
 read -p "Snapshot ID to restore (empty = most recent) : " SNAPSHOT
 SNAPSHOT="${{SNAPSHOT:-latest}}"
 
-TARGET="$HOME/.thunderbird-restored-$(date +%Y%m%d_%H%M%S)"
+TARGET="$HOME/{source_basename}-restored-$(date +%Y%m%d_%H%M%S)"
 echo "Restoring to $TARGET ..."
 "$RESTIC_BIN" -r "$SCRIPT_DIR/$REPO" restore "$SNAPSHOT" --target "$TARGET"
 
@@ -427,7 +427,7 @@ echo ""
 read -p "ID de la sauvegarde a restaurer (vide = la plus recente) : " SNAPSHOT
 SNAPSHOT="${{SNAPSHOT:-latest}}"
 
-TARGET="$HOME/.thunderbird-restored-$(date +%Y%m%d_%H%M%S)"
+TARGET="$HOME/{source_basename}-restored-$(date +%Y%m%d_%H%M%S)"
 echo "Restauration vers $TARGET ..."
 "$RESTIC_BIN" -r "$SCRIPT_DIR/$REPO" restore "$SNAPSHOT" --target "$TARGET"
 
