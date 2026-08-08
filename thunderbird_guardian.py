@@ -411,14 +411,32 @@ echo "  thunderbird &"
     log.info(f"✅ Script de restauration à jour : {script_path.name}")
 
 
+def sync_docs_to_disk(dest_dir: Path) -> None:
+    """Copie la doc de restauration sur le disque lui-même : en cas de
+    crash, elle doit être lisible sans dépendre de GitHub ni de ce PC."""
+    for name in ("README.md", "DISASTER_RECOVERY.md"):
+        source = BASE_DIR / name
+        if source.exists():
+            shutil.copy2(source, dest_dir / name)
+    log.info("✅ Documentation de restauration synchronisée sur le disque")
+
+
 # =============================================================================
 # NOTIFICATIONS
 # =============================================================================
 
 def notify_desktop(title: str, message: str, urgency: str = "normal") -> None:
+    # La taille du popup est un réglage du thème Plasma (Système >
+    # Notifications), pas quelque chose que notify-send contrôle — icône +
+    # urgence + durée d'affichage sont les seuls leviers côté script.
+    icon = "dialog-error" if urgency == "critical" else "drive-harddisk"
+    expire_ms = "0" if urgency == "critical" else "15000"
     try:
         subprocess.run(
-            ["notify-send", "-u", urgency, "-a", "Thunderbird Guardian", title, message],
+            [
+                "notify-send", "-u", urgency, "-i", icon, "-t", expire_ms,
+                "-a", "Thunderbird Guardian", title, message,
+            ],
             capture_output=True, timeout=10
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -490,6 +508,7 @@ def run_backup() -> None:
         log.warning("⚠️ Rétention ignorée : le dépôt a échoué au contrôle d'intégrité")
 
     write_restore_script(dest_dir, repo)
+    sync_docs_to_disk(dest_dir)
 
     elapsed = time.time() - start
     log.info("═" * 70)
