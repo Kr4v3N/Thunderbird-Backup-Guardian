@@ -1,8 +1,10 @@
-# Thunderbird Guardian
+# Thunderbird Backup Guardian
 
-**Sauvegarde chiffrée, automatisée et vérifiée du profil Thunderbird.**
+*[🇫🇷 Lire en français](README.fr.md)*
 
-Chiffrement AES-256 réel (restic) · déduplication · vérification d'intégrité · rétention quotidien/hebdomadaire/mensuel · restauration autonome (fonctionne même sans internet ni `restic` préinstallé) · notifications desktop + e-mail sur échec.
+**Encrypted, automated, verified backups for your Thunderbird profile.**
+
+Real AES-256 encryption (restic) · deduplication · integrity checking · daily/weekly/monthly retention · self-contained restore (works even without internet or `restic` preinstalled) · desktop + e-mail notifications on failure.
 
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
 ![restic](https://img.shields.io/badge/backend-restic-orange)
@@ -10,81 +12,83 @@ Chiffrement AES-256 réel (restic) · déduplication · vérification d'intégri
 
 ---
 
-## Sommaire
+## Table of contents
 
-- [Fonctionnalités](#fonctionnalités)
+- [Features](#features)
 - [Architecture](#architecture)
-- [Prérequis](#prérequis)
+- [Requirements](#requirements)
 - [Installation](#installation)
-- [Déploiement en production](#déploiement-en-production)
+- [Project structure](#project-structure)
+- [Deploying to production](#deploying-to-production)
 - [Configuration](#configuration)
-- [Utilisation quotidienne](#utilisation-quotidienne)
-- [Sécurité](#sécurité)
-- [🆘 Restauration](#-restauration--guide-détaillé)
+- [Daily usage](#daily-usage)
+- [Security](#security)
+- [🆘 Restore guide](#-restore-guide)
+- [Troubleshooting](#troubleshooting)
 - [FAQ](#faq)
-- [Historique](#historique)
+- [History](#history)
 
 ---
 
-## Fonctionnalités
+## Features
 
 | | |
 |---|---|
-| 🔐 **Chiffrement réel** | AES-256 via restic — pas un mot de passe décoratif ignoré à l'écriture (voir [Historique](#historique)) |
-| ♻️ **Déduplication** | Seuls les blocs nouveaux/modifiés sont stockés — sauvegardes incrémentales rapides après la première |
-| ✅ **Intégrité vérifiée** | Échantillonnage de données à chaque run + vérification complète à la demande (`--verify`) |
-| 🗓️ **Rétention fine** | Quotidien / hebdomadaire / mensuel configurables, purge automatique (`restic forget --prune`) |
-| 🔁 **Résilient au montage tardif** | Réessaie automatiquement si le disque externe n'est pas encore monté à l'heure du cron |
-| 🆘 **Restauration autonome** | Script de restauration auto-régénéré, fonctionne même sans `restic` installé (binaire statique embarqué) ni accès internet |
-| 🔔 **Notifications** | Desktop (`notify-send`) à chaque run, e-mail (Resend) en cas d'échec |
-| 🧩 **Zéro donnée personnelle codée en dur** | Aucun chemin absolu ni nom d'utilisateur enregistré dans le dépôt ou les scripts générés |
+| 🔐 **Real encryption** | AES-256 via restic — not a decorative password silently ignored on write (see [History](#history)) |
+| ♻️ **Deduplication** | Only new/changed blocks are stored — fast incremental backups after the first one |
+| ✅ **Verified integrity** | Data sampling on every run + full check on demand (`--verify`) |
+| 🗓️ **Fine-grained retention** | Configurable daily / weekly / monthly, automatic pruning (`restic forget --prune`) |
+| 🔁 **Resilient to late mounting** | Automatically retries if the external disk isn't mounted yet at cron time |
+| 🆘 **Self-contained restore** | Auto-regenerated restore script, works even without `restic` installed (bundled static binary) or internet access |
+| 🔔 **Notifications** | Desktop (`notify-send`) on every run, e-mail (Resend) on failure |
+| 🧩 **Zero hardcoded personal data** | No absolute path or username stored in the repository or generated scripts |
 
 ---
 
 ## Architecture
 
-### Flux de sauvegarde
+### Backup flow
 
 ```mermaid
 flowchart TD
-    A["⏰ Cron quotidien"] --> B{"Disque externe monté ?"}
-    B -- Non --> C["Attente + retry (jusqu'à 30 min)"]
+    A["⏰ Daily cron"] --> B{"External disk mounted?"}
+    B -- No --> C["Wait + retry (up to 30 min)"]
     C --> B
-    B -- Oui --> D["Fermeture de Thunderbird"]
-    D -- Échec --> Z["❌ Abandon"]
-    D -- OK --> E["restic backup (chemin relatif)"]
-    E -- Échec --> Z
+    B -- Yes --> D["Close Thunderbird"]
+    D -- Failure --> Z["❌ Abort"]
+    D -- OK --> E["restic backup (relative path)"]
+    E -- Failure --> Z
     E -- OK --> F["restic check --read-data-subset 5%"]
-    F --> G["restic forget --prune\n(quotidien / hebdo / mensuel)"]
-    G --> H["Redémarrage de Thunderbird"]
-    H --> I["Régénération de RESTORE_EMERGENCY.sh"]
-    I --> J["✅ Notification desktop"]
-    Z --> K["📧 Alerte e-mail (Resend)"]
+    F --> G["restic forget --prune\n(daily / weekly / monthly)"]
+    G --> H["Restart Thunderbird"]
+    H --> I["Regenerate RESTORE_EMERGENCY.sh"]
+    I --> J["✅ Desktop notification"]
+    Z --> K["📧 E-mail alert (Resend)"]
 ```
 
-### Flux de restauration
+### Restore flow
 
 ```mermaid
 flowchart TD
-    A["bash RESTORE_EMERGENCY.sh"] --> B{"restic installé ?"}
-    B -- Non --> C["Bascule sur restic-bin/restic embarqué"]
-    B -- Oui --> D["restic snapshots"]
+    A["bash RESTORE_EMERGENCY.sh"] --> B{"restic installed?"}
+    B -- No --> C["Falls back to bundled restic-bin/restic"]
+    B -- Yes --> D["restic snapshots"]
     C --> D
-    D --> E["Choix du snapshot à restaurer"]
-    E --> F["restic restore → dossier horodaté"]
-    F --> G["Vérification manuelle du contenu"]
-    G --> H["mv vers ~/.thunderbird"]
+    D --> E["Choose snapshot to restore"]
+    E --> F["restic restore → timestamped folder"]
+    F --> G["Manual content check"]
+    G --> H["mv to ~/.thunderbird"]
     H --> I["thunderbird &"]
 ```
 
 ---
 
-## Prérequis
+## Requirements
 
-- Linux (testé sur Kubuntu), paquets système `restic` et `thunderbird`
+- Linux (tested on Kubuntu), `restic` and `thunderbird` system packages
 - Python 3.10+
-- Un compte [Resend](https://resend.com/) (gratuit) si tu veux les alertes e-mail
-- Un disque externe (ou tout point de montage) pour héberger le dépôt chiffré
+- A [Resend](https://resend.com/) account (free tier works) if you want e-mail alerts
+- An external disk (or any mount point) to host the encrypted repository
 
 ---
 
@@ -93,291 +97,288 @@ flowchart TD
 ```bash
 cd ~/PycharmProjects/Backup-Thunderbird
 
-# Dépendances système
+# System dependencies
 sudo apt install restic thunderbird
 
-# Environnement virtuel Python
+# Python virtual environment
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 
-# Configuration des alertes e-mail (optionnel)
+# E-mail alerts setup (optional)
 cp .env.example .env
 nano .env   # RESEND_API_KEY, EMAIL_FROM, EMAIL_TO
 ```
 
 ---
 
-## Structure du projet
+## Project structure
 
 ```
 ~/PycharmProjects/Backup-Thunderbird/
 │
-├── thunderbird_guardian.py     ← Script principal
-├── requirements.txt            ← Dépendances Python (venv)
-├── .venv/                      ← Environnement virtuel (non versionné)
-├── .env                        ← Secrets (clé Resend, adresse e-mail — non versionné)
-├── .env.example                ← Modèle de .env, sans secret
-├── README.md                   ← Ce fichier
-├── DISASTER_RECOVERY.md        ← Procédures de restauration, tous scénarios
-└── CONFIGURATION_REPERTOIRE.md ← Détail de la résolution du répertoire de destination
+├── thunderbird_guardian.py       ← Main script
+├── requirements.txt              ← Python dependencies (venv)
+├── .venv/                        ← Virtual environment (not versioned)
+├── .env                          ← Secrets (Resend key, e-mail address — not versioned)
+├── .env.example                  ← .env template, no secrets
+├── README.md / README.fr.md      ← This file (EN / FR)
+├── DISASTER_RECOVERY.md / .fr.md ← Restore procedures, all scenarios (EN / FR)
+└── DIRECTORY_CONFIGURATION.md    ← How the destination directory is resolved
 ```
 
-Sur le disque de sauvegarde lui-même (synchronisé automatiquement à chaque run) :
+On the backup disk itself (synced automatically on every run):
 ```
 Backup Thunderbird/
-├── restic-repo/            ← Dépôt chiffré (données + métadonnées restic)
-├── restic-bin/restic       ← Binaire restic statique embarqué (secours hors-ligne)
-├── RESTORE_EMERGENCY.sh    ← Régénéré à chaque sauvegarde réussie
-├── README.md                ┐ Copies de la doc de restauration — lisibles
-├── DISASTER_RECOVERY.md     ┘ directement depuis le disque, sans PC ni internet
-└── guardian_automated.log  ← Log applicatif (rotation automatique, 10 Mo x5)
+├── restic-repo/                  ← Encrypted repository (data + restic metadata)
+├── restic-bin/restic             ← Bundled static restic binary (offline fallback)
+├── RESTORE_EMERGENCY.sh / .fr.sh ← Regenerated on every successful backup (EN / FR)
+├── README.md / README.fr.md        ┐ Restore docs, readable straight off the
+├── DISASTER_RECOVERY.md / .fr.md   ┘ disk — no PC or internet required
+└── guardian_automated.log        ← Application log (auto-rotated, 10 MB x5)
 ```
 
 ---
 
-## Déploiement en production
+## Deploying to production
 
-Suivre ces étapes dans l'ordre pour passer d'une installation locale à un
-système entièrement autonome.
+Follow these steps in order to go from a local install to a fully
+self-sufficient system.
 
-**1. Initialiser le mot de passe de chiffrement**
+**1. Set the encryption password**
 ```bash
 .venv/bin/python3 thunderbird_guardian.py --init
 ```
 
-**2. Mettre le mot de passe à l'abri d'un crash de ce PC — étape non-optionnelle**
-Ce mot de passe ne vit que dans le trousseau système de cette machine. Sans
-copie externe (Proton Pass, autre gestionnaire de mots de passe, copie
-papier), une panne de ce PC rend le dépôt chiffré définitivement
-illisible — voir [Sécurité](#sécurité).
+**2. Back the password up somewhere this PC crashing can't reach — not optional**
+This password only lives in this machine's system keyring. Without an
+external copy (Proton Pass, another password manager, a paper backup), a
+failure of this PC makes the encrypted repository permanently unreadable —
+see [Security](#security).
 
-**3. Premier run manuel, pour valider avant d'automatiser**
+**3. First manual run, to validate before automating**
 ```bash
 .venv/bin/python3 thunderbird_guardian.py
 ```
-Vérifie que : Thunderbird se ferme et redémarre correctement, l'archive
-`restic-repo` est créée sur le disque, `RESTORE_EMERGENCY.sh` est généré,
-et que la notification desktop s'affiche.
+Check that: Thunderbird closes and restarts correctly, the `restic-repo`
+archive is created on the disk, `RESTORE_EMERGENCY.sh` is generated, and
+the desktop notification appears.
 
-**4. Embarquer le binaire restic statique sur le disque (résilience hors-ligne)**
+**4. Bundle the static restic binary onto the disk (offline resilience)**
 ```bash
-DEST="/chemin/vers/Backup Thunderbird/restic-bin"
+DEST="/path/to/Backup Thunderbird/restic-bin"
 mkdir -p "$DEST"
 API=$(curl -s https://api.github.com/repos/restic/restic/releases/latest)
 BIN_URL=$(echo "$API" | grep browser_download_url | grep "linux_amd64.bz2" | cut -d '"' -f4)
 SUMS_URL=$(echo "$API" | grep browser_download_url | grep '"SHA256SUMS"' | cut -d '"' -f4)
 curl -sL -o /tmp/restic.bz2 "$BIN_URL"
 curl -sL -o /tmp/SHA256SUMS "$SUMS_URL"
-[ "$(grep linux_amd64.bz2 /tmp/SHA256SUMS | awk '{print $1}')" = "$(sha256sum /tmp/restic.bz2 | awk '{print $1}')" ] && echo "✅ checksum OK" || echo "❌ NE PAS UTILISER"
+[ "$(grep linux_amd64.bz2 /tmp/SHA256SUMS | awk '{print $1}')" = "$(sha256sum /tmp/restic.bz2 | awk '{print $1}')" ] && echo "✅ checksum OK" || echo "❌ DO NOT USE"
 bunzip2 -c /tmp/restic.bz2 > "$DEST/restic" && chmod +x "$DEST/restic"
 ```
-Permet à `RESTORE_EMERGENCY.sh` de fonctionner même si `restic` n'est plus
-installable (pas d'internet, dépôt de paquets indisponible) sur la machine
-de secours.
+Lets `RESTORE_EMERGENCY.sh` work even if `restic` can no longer be
+installed (no internet, package repo unavailable) on the recovery machine.
 
-**5. Tester une restauration au moins une fois**
+**5. Test a restore at least once**
 ```bash
-bash "/chemin/vers/Backup Thunderbird/RESTORE_EMERGENCY.sh"
+bash "/path/to/Backup Thunderbird/RESTORE_EMERGENCY.sh"
 ```
-Un système de sauvegarde jamais restauré n'est qu'une hypothèse — voir
-[Restauration](#-restauration--guide-détaillé).
+A backup system that's never been restored is just a hypothesis — see
+[Restore guide](#-restore-guide).
 
-**6. Automatiser via cron**
+**6. Automate via cron**
 ```bash
 crontab -e
 ```
 ```
 40 18 * * * export DISPLAY=:0 && export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus && cd ~/PycharmProjects/Backup-Thunderbird && .venv/bin/python3 thunderbird_guardian.py
 ```
-`DISPLAY`/`DBUS_SESSION_BUS_ADDRESS` sont nécessaires pour que
-`notify-send` fonctionne depuis un cron (pas de session graphique attachée
-par défaut).
+`DISPLAY`/`DBUS_SESSION_BUS_ADDRESS` are required for `notify-send` to
+work from cron (no graphical session attached by default).
 
-**7. Valider le premier run automatique**
-Vérifie le lendemain : notification reçue (desktop et/ou e-mail selon le
-résultat), `guardian_automated.log` à jour sur le disque, nouvelle
-sauvegarde présente (`restic snapshots`).
+**7. Validate the first automatic run**
+Check the next day: notification received (desktop and/or e-mail
+depending on outcome), `guardian_automated.log` up to date on the disk,
+a new backup present (`restic snapshots`).
 
 ---
 
 ## Configuration
 
-| Variable | Défaut | Description |
-|----------|--------|--------------|
-| `TB_BACKUP_DIR` | `~/thunderbird_backups` | Répertoire de destination (aucune auto-détection de disque) |
-| `TB_SOURCE_DIR` | `~/.thunderbird` | Répertoire source |
-| `TB_KEEP_DAILY` | `7` | Sauvegardes quotidiennes conservées |
-| `TB_KEEP_WEEKLY` | `4` | Sauvegardes hebdomadaires conservées |
-| `TB_KEEP_MONTHLY` | `6` | Sauvegardes mensuelles conservées |
-| `TB_MOUNT_RETRY_ATTEMPTS` | `6` | Tentatives d'attente du disque |
-| `TB_MOUNT_RETRY_DELAY` | `300` | Secondes entre deux tentatives |
-| `TB_LOG_LEVEL` | `INFO` | Verbosité (DEBUG/INFO/WARNING/ERROR) |
+| Variable | Default | Description |
+|----------|---------|--------------|
+| `TB_BACKUP_DIR` | `~/thunderbird_backups` | Destination directory (no disk auto-detection) |
+| `TB_SOURCE_DIR` | `~/.thunderbird` | Source directory |
+| `TB_KEEP_DAILY` | `7` | Daily backups kept |
+| `TB_KEEP_WEEKLY` | `4` | Weekly backups kept |
+| `TB_KEEP_MONTHLY` | `6` | Monthly backups kept |
+| `TB_MOUNT_RETRY_ATTEMPTS` | `6` | Disk-wait retry attempts |
+| `TB_MOUNT_RETRY_DELAY` | `300` | Seconds between attempts |
+| `TB_LOG_LEVEL` | `INFO` | Verbosity (DEBUG/INFO/WARNING/ERROR) |
 
-Dans `.env` (jamais versionné — voir `.env.example`) :
+In `.env` (never versioned — see `.env.example`):
 
 | Variable | Description |
 |----------|--------------|
-| `RESEND_API_KEY` | Clé API Resend pour l'envoi d'alertes e-mail |
-| `EMAIL_FROM` | Adresse expéditrice (ex : `onboarding@resend.dev`) |
-| `EMAIL_FROM_NAME` | Nom affiché de l'expéditeur |
-| `EMAIL_TO` | Adresse destinataire des alertes d'échec |
+| `RESEND_API_KEY` | Resend API key for sending alert e-mails |
+| `EMAIL_FROM` | Sender address (e.g. `onboarding@resend.dev`) |
+| `EMAIL_FROM_NAME` | Sender display name |
+| `EMAIL_TO` | Recipient address for failure alerts |
 
-Détail de la résolution du répertoire de destination :
-[CONFIGURATION_REPERTOIRE.md](CONFIGURATION_REPERTOIRE.md).
+Full detail on how the destination directory is resolved:
+[DIRECTORY_CONFIGURATION.md](DIRECTORY_CONFIGURATION.md).
 
 ---
 
-## Utilisation quotidienne
+## Daily usage
 
 ```bash
-# Sauvegarde manuelle
+# Manual backup
 .venv/bin/python3 thunderbird_guardian.py
 
-# Vérification complète du dépôt (lent, relit chaque bloc)
+# Full repository check (slow, re-reads every block)
 .venv/bin/python3 thunderbird_guardian.py --verify
 
-# Lister les sauvegardes disponibles
+# List available backups
 export RESTIC_PASSWORD="$(.venv/bin/python3 -c "import keyring; print(keyring.get_password('thunderbird_backup_guardian','encryption_password'))")"
-restic -r "/chemin/vers/Backup Thunderbird/restic-repo" snapshots
+restic -r "/path/to/Backup Thunderbird/restic-repo" snapshots
 ```
 
 ---
 
-## Sécurité
+## Security
 
-- **Chiffrement** : AES-256 via restic, appliqué réellement à l'écriture
-  (contrairement à l'ancienne version — voir [Historique](#historique)).
-- **Mot de passe** : stocké dans le trousseau système (`keyring`), jamais
-  en dur dans le code ni dans un fichier versionné. Injecté au processus
-  `restic` uniquement via variable d'environnement, jamais loggé.
-- **Aucune donnée personnelle codée en dur** : la sauvegarde utilise un
-  chemin relatif (`cwd` sur le dossier parent), donc restic n'enregistre
-  jamais de chemin absolu ni de nom d'utilisateur — ni dans le dépôt, ni
-  dans `RESTORE_EMERGENCY.sh` généré. Vérifié en exécution réelle.
-- **Binaire restic embarqué vérifié** : le binaire statique de secours est
-  téléchargé depuis les releases officielles GitHub et comparé à son
-  SHA256 publié avant tout usage.
-- **Point de défaillance unique assumé** : ce mot de passe est la seule
-  clé du dépôt. Il doit être stocké indépendamment de cette machine
-  (gestionnaire de mots de passe synchronisé type Proton Pass/Bitwarden,
-  ou copie papier) — sans quoi une panne de ce PC rend la sauvegarde
-  définitivement illisible. Ce n'est pas un défaut du script : c'est le
-  prix d'un chiffrement qui protège vraiment.
+- **Encryption**: real AES-256 via restic, actually applied on write
+  (unlike the previous version — see [History](#history)).
+- **Password**: stored in the system keyring, never hardcoded in the code
+  or in a versioned file. Passed to the `restic` process only via
+  environment variable, never logged.
+- **No hardcoded personal data**: the backup uses a relative path (`cwd`
+  set to the parent directory), so restic never records an absolute path
+  or a username — neither in the repository nor in the generated
+  `RESTORE_EMERGENCY.sh`. Verified through real execution.
+- **Verified bundled restic binary**: the static fallback binary is
+  downloaded from the official GitHub releases and checked against its
+  published SHA256 before any use.
+- **Single point of failure, by design**: this password is the only key
+  to the repository. It must be stored independently of this machine (a
+  synced password manager like Proton Pass/Bitwarden, or a paper backup)
+  — otherwise a failure of this PC makes the backup permanently
+  unreadable. This isn't a flaw in the script: it's the price of
+  encryption that actually protects something.
 
 ---
 
-## 🆘 RESTAURATION — Guide détaillé
+## 🆘 Restore guide
 
-### Principe de sécurité
+### Safety principle
 
-**Rien n'est jamais écrasé automatiquement.** La restauration écrit toujours
-dans un dossier neuf et horodaté (`~/.thunderbird-restored-<date>`), jamais
-directement sur ton profil actif. Tu vérifies le résultat, puis c'est toi
-qui bascules manuellement en une commande `mv`. Si quelque chose se passe
-mal, ton ancien profil (ou l'absence de profil) n'a pas bougé.
+**Nothing is ever overwritten automatically.** A restore always writes to
+a fresh, timestamped folder (`~/.thunderbird-restored-<date>`), never
+directly onto your active profile. You check the result, then you
+manually switch over with a single `mv` command. If anything goes wrong,
+your old profile (or the lack of one) hasn't moved.
 
-### Étape par étape
+### Step by step
 
-**1. Localiser le disque de sauvegarde et le script**
+**1. Locate the backup disk and the script**
 
-Sur le disque externe, dans le dossier `Backup Thunderbird`, tu trouveras :
+On the external disk, inside the `Backup Thunderbird` folder, you'll find:
 ```
 Backup Thunderbird/
-├── restic-repo/           ← les données chiffrées elles-mêmes
-├── restic-bin/restic      ← copie de secours du binaire restic (hors-ligne)
-└── RESTORE_EMERGENCY.sh   ← le script à lancer, régénéré à chaque sauvegarde
+├── restic-repo/           ← the encrypted data itself
+├── restic-bin/restic      ← fallback copy of the restic binary (offline)
+└── RESTORE_EMERGENCY.sh   ← the script to run, regenerated on every backup
 ```
 
-**2. Lancer le script**
+**2. Run the script**
 ```bash
-cd "/chemin/vers/Backup Thunderbird"
+cd "/path/to/Backup Thunderbird"
 bash RESTORE_EMERGENCY.sh
 ```
 
-**3. Ce qui se passe, dans l'ordre**
+**3. What happens, in order**
 
-- Le script vérifie si `restic` est installé sur la machine. Sinon, il
-  bascule automatiquement sur `restic-bin/restic` embarqué sur le disque —
-  aucune action de ta part, aucun besoin d'internet à ce stade.
-- Il te demande le **mot de passe du dépôt restic** (celui défini à
-  `--init`, retrouvable dans Proton Pass/ton gestionnaire de mots de passe
-  si ce PC n'existe plus — voir FAQ).
-- Il affiche la liste des sauvegardes disponibles (`restic snapshots`),
-  avec leur date.
-- Il te demande quel snapshot restaurer (Entrée = le plus récent).
-- Il restaure dans `~/.thunderbird-restored-<date>` et t'indique le chemin
-  exact où se trouve le profil restauré une fois l'opération terminée.
+- The script checks whether `restic` is installed on the machine. If
+  not, it automatically falls back to the `restic-bin/restic` bundled on
+  the disk — no action needed on your part, no internet required at this
+  stage.
+- It asks for the **restic repository password** (the one set at
+  `--init`, recoverable from Proton Pass or your password manager if
+  this PC no longer exists — see FAQ).
+- It lists the available backups (`restic snapshots`), with their dates.
+- It asks which snapshot to restore (Enter = most recent).
+- It restores to `~/.thunderbird-restored-<date>` and tells you the
+  exact path to the restored profile once done.
 
-**4. Vérifier avant de basculer**
+**4. Check before switching over**
 
-Regarde dans le dossier indiqué que le contenu a l'air complet (taille
-cohérente, dossiers de mails présents) avant de continuer.
+Look inside the indicated folder to make sure the content looks complete
+(consistent size, mail folders present) before continuing.
 
-**5. Activer le profil restauré**
+**5. Activate the restored profile**
 
-Le script affiche lui-même les commandes exactes à copier-coller à la fin,
-adaptées à ton `$HOME` réel et au nom exact de ton dossier de profil. Dans
-les grandes lignes :
+The script itself prints the exact commands to copy-paste at the end,
+adapted to your real `$HOME` and the exact name of your profile folder.
+Roughly:
 ```bash
 pkill -x thunderbird 2>/dev/null || true
-mv ~/.thunderbird ~/.thunderbird.old_<date>       # garde l'actif de côté, au cas où
+mv ~/.thunderbird ~/.thunderbird.old_<date>       # keep the active one aside, just in case
 mv ~/.thunderbird-restored-<date>/.thunderbird ~/.thunderbird
 thunderbird &
 ```
 
-### Restaurer seulement un dossier ou un e-mail précis
+### Restoring just one folder or e-mail
 
-Pas besoin de tout restaurer pour récupérer un seul élément :
+No need to restore everything to get a single item back:
 ```bash
-export RESTIC_PASSWORD='ton_mot_de_passe'
-restic -r "/chemin/vers/Backup Thunderbird/restic-repo" \
-  restore latest --target /tmp/restauration_partielle \
-  --include "*NomDuDossier*"
+export RESTIC_PASSWORD='your_password'
+restic -r "/path/to/Backup Thunderbird/restic-repo" \
+  restore latest --target /tmp/partial_restore \
+  --include "*FolderName*"
 ```
-Ou explorer le contenu sans rien extraire (montage en lecture seule) :
+Or browse the content without extracting anything (read-only mount):
 ```bash
 mkdir -p /tmp/tb-browse
-restic -r "/chemin/vers/Backup Thunderbird/restic-repo" mount /tmp/tb-browse
+restic -r "/path/to/Backup Thunderbird/restic-repo" mount /tmp/tb-browse
 ```
 
-### Scénario catastrophe (PC mort, OS réinstallé, autre machine)
+### Disaster scenario (dead PC, reinstalled OS, different machine)
 
-Le principe reste identique — brancher le disque, lancer
-`RESTORE_EMERGENCY.sh` — mais quelques points changent (localisation du
-point de montage, installation de `restic`/`thunderbird`, récupération du
-mot de passe). Détail complet, scénario par scénario, dans
-**[DISASTER_RECOVERY.md](DISASTER_RECOVERY.md)**.
+The principle stays the same — plug in the disk, run
+`RESTORE_EMERGENCY.sh` — but a few things change (mount point location,
+installing `restic`/`thunderbird`, recovering the password). Full detail,
+scenario by scenario, in **[DISASTER_RECOVERY.md](DISASTER_RECOVERY.md)**.
 
 ---
 
-## Dépannage
+## Troubleshooting
 
-**`❌ ERREUR: module 'X' manquant`**
-Le script n'est pas lancé avec l'interpréteur du venv :
+**`❌ ERROR: module 'X' missing`**
+The script isn't being run with the venv's interpreter:
 ```bash
-.venv/bin/python3 thunderbird_guardian.py   # et pas: python3 thunderbird_guardian.py
+.venv/bin/python3 thunderbird_guardian.py   # not: python3 thunderbird_guardian.py
 ```
 
-**`❌ Dépendances système manquantes : restic`**
+**`❌ Missing system dependencies: restic`**
 ```bash
 sudo apt install restic
 ```
 
-**`❌ Mot de passe non initialisé`**
+**`❌ Password not initialized`**
 ```bash
 .venv/bin/python3 thunderbird_guardian.py --init
 ```
 
-**Le disque n'est jamais détecté**
+**The disk is never detected**
 ```bash
 export TB_LOG_LEVEL=DEBUG
 .venv/bin/python3 thunderbird_guardian.py
 ```
-Vérifie le point de montage réel (`/media/$USER/...` vs `/run/media/$USER/...`
-selon l'environnement de bureau) et ajuste `TB_BACKUP_DIR` si besoin — voir
-[CONFIGURATION_REPERTOIRE.md](CONFIGURATION_REPERTOIRE.md).
+Check the real mount point (`/media/$USER/...` vs `/run/media/$USER/...`
+depending on your desktop environment) and set `TB_BACKUP_DIR`
+accordingly — see [DIRECTORY_CONFIGURATION.md](DIRECTORY_CONFIGURATION.md).
 
-**Le script ne s'exécute pas en CRON**
+**The script doesn't run under CRON**
 ```bash
 grep CRON /var/log/syslog | tail -20
 crontab -l
@@ -387,90 +388,90 @@ crontab -l
 
 ## FAQ
 
-**J'ai oublié le mot de passe du dépôt restic. Y a-t-il un moyen de contourner ça ?**
-Non. C'est un vrai chiffrement AES-256, pas de porte dérobée — c'est le prix
-d'une protection réelle (l'ancienne version du script *croyait* chiffrer
-mais ne le faisait pas du tout, ce n'est plus le cas). Le mot de passe doit
-être conservé quelque part d'indépendant de ce PC (Proton Pass, autre
-gestionnaire de mots de passe, copie papier). Sans lui, le dépôt est
-définitivement illisible.
+**I forgot the restic repository password. Is there a way around it?**
+No. This is real AES-256 encryption, no backdoor — that's the price of
+actual protection (the previous version of the script *thought* it was
+encrypting but wasn't at all; that's no longer the case). The password
+must be kept somewhere independent of this PC (Proton Pass, another
+password manager, a paper backup). Without it, the repository is
+permanently unreadable.
 
-**La restauration va-t-elle écraser mes e-mails actuels ?**
-Non, jamais automatiquement. Elle restaure toujours dans un nouveau dossier
-horodaté. C'est toi qui décides, ensuite, de remplacer ton profil actif —
-et le script te propose même de sauvegarder l'ancien profil à côté
-(`.thunderbird.old_<date>`) avant de le remplacer.
+**Will restoring overwrite my current e-mails?**
+No, never automatically. It always restores to a new, timestamped folder.
+You then decide whether to replace your active profile — and the script
+even offers to back up the old profile alongside it
+(`.thunderbird.old_<date>`) before replacing it.
 
-**Le disque externe ne se monte plus au même endroit qu'avant, ça pose problème ?**
-Non. `RESTORE_EMERGENCY.sh` se situe toujours à la racine du disque et
-calcule son propre emplacement dynamiquement (`SCRIPT_DIR`) — peu importe
-où le disque est monté, tant que tu lances le script depuis ce dossier.
+**The external disk no longer mounts at the same location as before, is that a problem?**
+No. `RESTORE_EMERGENCY.sh` always lives at the root of the disk and
+computes its own location dynamically (`SCRIPT_DIR`) — it doesn't matter
+where the disk is mounted, as long as you run the script from that folder.
 
-**Je restaure sur un autre PC, ou avec un nom d'utilisateur Linux différent, est-ce que ça marche ?**
-Oui. Tout repose sur `$HOME` (résolu dynamiquement au moment de
-l'exécution) et sur le disque externe — rien ne dépend du nom de la
-machine ou de l'utilisateur d'origine. La sauvegarde elle-même ne contient
-aucun chemin absolu ni nom d'utilisateur (voir [Sécurité](#sécurité)).
+**I'm restoring on a different PC, or with a different Linux username — does it still work?**
+Yes. Everything relies on `$HOME` (resolved dynamically at runtime) and
+on the external disk — nothing depends on the original machine's or
+user's name. The backup itself doesn't contain any absolute path or
+username (see [Security](#security)).
 
-**`restic` n'est pas installé sur la machine de secours, et je n'ai pas internet.**
-Utilise le binaire embarqué sur le disque (`restic-bin/restic`) —
-`RESTORE_EMERGENCY.sh` bascule dessus automatiquement, sans action de ta
-part. Si ce binaire a lui-même disparu et que tu as internet, voir la
-procédure de téléchargement avec vérification de checksum dans
-[DISASTER_RECOVERY.md](DISASTER_RECOVERY.md#scénario-3--restic-introuvable-et-le-binaire-embarqué-a-disparuest-corrompu).
+**`restic` isn't installed on the recovery machine, and I have no internet.**
+Use the binary bundled on the disk (`restic-bin/restic`) —
+`RESTORE_EMERGENCY.sh` falls back to it automatically, no action needed.
+If that binary is itself missing and you do have internet, see the
+checksum-verified download procedure in
+[DISASTER_RECOVERY.md](DISASTER_RECOVERY.md#scenario-3--restic-not-found-and-the-bundled-binary-is-missingcorrupted).
 
-**Est-ce que je dois installer Thunderbird avant de restaurer ?**
-Non. Seul `restic` (ou son binaire embarqué) est nécessaire pour restaurer
-les données — Thunderbird n'intervient qu'à la toute dernière étape, pour
-rouvrir le profil une fois restauré. L'ordre d'installation n'a aucune
-importance technique.
+**Do I need to install Thunderbird before restoring?**
+No. Only `restic` (or its bundled binary) is required to restore the
+data — Thunderbird only comes into play at the very last step, to reopen
+the profile once restored. Install order has no technical importance.
 
-**Comment je sais quelle sauvegarde restaurer si je veux revenir à une date précise (pas la plus récente) ?**
-`RESTORE_EMERGENCY.sh` affiche la liste complète des sauvegardes disponibles
-avec leur date avant de te demander laquelle choisir. Tu peux aussi lister
-manuellement : `restic -r "<repo>" snapshots`.
+**How do I know which backup to restore if I want to go back to a specific date (not the latest)?**
+`RESTORE_EMERGENCY.sh` shows the full list of available backups with
+their dates before asking you to pick one. You can also list them
+manually: `restic -r "<repo>" snapshots`.
 
-**Comment vérifier qu'une sauvegarde n'est pas corrompue avant de m'en servir ?**
+**How do I check that a backup isn't corrupted before relying on it?**
 ```bash
 .venv/bin/python3 thunderbird_guardian.py --verify
 ```
-Lance un contrôle complet (`restic check --read-data`) — plus lent qu'une
-vérification courante, mais qui relit vraiment chaque bloc de données.
+Runs a full check (`restic check --read-data`) — slower than a routine
+check, but it actually re-reads every data block.
 
-**Le disque de sauvegarde lui-même montre des signes de faiblesse (erreurs, lenteurs).**
-Ne lance aucune écriture dessus (ni sauvegarde, ni restauration). Fais
-d'abord une image bit-à-bit sur un support sain (`ddrescue`), puis travaille
-sur la copie. Détail dans [DISASTER_RECOVERY.md](DISASTER_RECOVERY.md#scénario-4--le-disque-de-sauvegarde-montre-des-signes-de-défaillance).
+**The backup disk itself shows signs of failing (errors, slowdowns).**
+Don't run any write operation on it (no backup, no restore). First make a
+bit-for-bit image onto a healthy drive (`ddrescue`), then work from the
+copy. Detail in [DISASTER_RECOVERY.md](DISASTER_RECOVERY.md#scenario-4--the-backup-disk-shows-signs-of-failure).
 
-**Ce script de restauration a-t-il vraiment été testé, ou juste écrit ?**
-Testé en exécution réelle, pas seulement relu : un dépôt restic jetable a
-été créé avec de vraies données de test, restauré de bout en bout via
-`RESTORE_EMERGENCY.sh`, avec comparaison bit-à-bit (`diff -r`) confirmant
-l'identité parfaite entre original et restauré — à la fois avec `restic`
-système et avec le binaire embarqué en secours (PATH sans `restic` simulé
-explicitement). Deux bugs réels ont été trouvés et corrigés pendant ce
-test : un chemin de restauration incorrect, et un nom d'utilisateur codé
-en dur qui se serait retrouvé dans le dépôt et les scripts générés.
-
----
-
-## Historique
-
-**v22 (actuelle) — migration vers restic.** La v21 utilisait
-`zipfile.ZipFile.setpassword()` pour "chiffrer" les archives — une
-limitation connue du module standard Python qui **ignore silencieusement
-le mot de passe à l'écriture**. Toutes les sauvegardes produites par la
-v21 étaient donc en clair, malgré la documentation annonçant un
-chiffrement AES-256. La v22 remplace entièrement ce mécanisme par restic
-(chiffrement réel, déduplication, vérification d'intégrité native), corrige
-un bug de répertoire de destination codé en dur, et ajoute la détection
-d'échec (le script tournait avec ~50 % d'échecs silencieux sur 6 mois,
-faute d'alerte), la résilience au montage tardif du disque, et une
-restauration entièrement autonome et testée en conditions réelles.
+**Has this restore script actually been tested, or just written?**
+Tested through real execution, not just reviewed: a throwaway restic
+repository was created with real test data, restored end to end via
+`RESTORE_EMERGENCY.sh`, with a bit-for-bit comparison (`diff -r`)
+confirming a perfect match between original and restored — both with the
+system `restic` and with the bundled fallback binary (PATH without
+`restic`, simulated explicitly). Two real bugs were found and fixed
+during this test: an incorrect restore path, and a hardcoded username
+that would otherwise have ended up in the repository and generated
+scripts.
 
 ---
 
-*Né d'un besoin personnel (et d'une découverte peu agréable — voir*
-*[Historique](#historique)*
-*) — partagé sous licence MIT pour quiconque cherche une sauvegarde*
-*Thunderbird réellement chiffrée, pas juste en apparence.*
+## History
+
+**v22 (current) — migration to restic.** v21 used
+`zipfile.ZipFile.setpassword()` to "encrypt" archives — a known
+limitation of the Python standard library that **silently ignores the
+password on write**. Every backup produced by v21 was therefore stored
+in plain text, despite the documentation advertising AES-256 encryption.
+v22 fully replaces that mechanism with restic (real encryption,
+deduplication, native integrity checking), fixes a hardcoded destination
+directory bug, and adds failure detection (the script had been running
+with a ~50% silent failure rate over 6 months, with no alerting), late
+disk-mount resilience, and a fully self-contained restore tested through
+real execution.
+
+---
+
+*Born out of a personal need (and an unpleasant discovery — see*
+*[History](#history)*
+*) — shared under the MIT license for anyone looking for a Thunderbird*
+*backup that's actually encrypted, not just apparently so.*

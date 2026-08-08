@@ -1,20 +1,20 @@
-# Secrets et variables d'environnement
+# Secrets and environment variables
 .env
 .env.*
 !.env.example
 
-# Environnement virtuel
+# Virtual environment
 .venv/
 
-# Config IDE locale (chemins machine-spécifiques)
+# Local IDE config (machine-specific paths)
 .idea/
 
-# Logs (non maîtrisés, régénérés à chaque run, peuvent devenir volumineux)
+# Logs (unmanaged, regenerated on every run, can grow large)
 *.log
 
-# Artefacts Python régénérables
+# Regenerable Python artifacts
 __pycache__/
 *.pyc
 
-# Carnet de bord local, pas destiné au partage public
+# Local working notes, not meant for public sharing
 todo.md

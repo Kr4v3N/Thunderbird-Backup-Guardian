@@ -1,114 +1,116 @@
-# 🆘 GUIDE DE RESTAURATION — TOUS SCÉNARIOS
+# 🆘 RESTORE GUIDE — ALL SCENARIOS
 
-Ce document couvre la restauration du profil Thunderbird depuis le dépôt
-restic, du cas le plus simple (erreur de manipulation) au pire cas (PC mort,
-OS réinstallé, disque de secours à récupérer sur une machine inconnue).
+*[🇫🇷 Lire en français](DISASTER_RECOVERY.fr.md)*
 
-**Principe de sécurité dans tous les cas** : la restauration écrit toujours
-dans un dossier séparé (`~/.thunderbird-restored-<date>`), jamais directement
-sur `~/.thunderbird`. Rien n'est écrasé tant que tu n'as pas vérifié le
-résultat et fait le basculement toi-même.
+This document covers restoring the Thunderbird profile from the restic
+repository, from the simplest case (a mistake) to the worst case (dead
+PC, reinstalled OS, recovery disk on an unfamiliar machine).
+
+**Safety principle in every case**: a restore always writes to a separate
+folder (`~/.thunderbird-restored-<date>`), never directly onto
+`~/.thunderbird`. Nothing is overwritten until you've checked the result
+and done the switch-over yourself.
 
 ---
 
-## Scénario 1 — Erreur de manipulation (cas courant)
+## Scenario 1 — Mistake / accidental deletion (common case)
 
-Le PC actuel fonctionne, le disque de sauvegarde est branché, tu veux juste
-revenir en arrière (mail supprimé par erreur, dossier corrompu...).
+The current PC works fine, the backup disk is plugged in, you just want
+to roll back (deleted an e-mail by mistake, a corrupted folder...).
 
 ```bash
-cd "/run/media/$USER/<NOM_DISQUE>/Backup Thunderbird"
+cd "/run/media/$USER/<DISK_NAME>/Backup Thunderbird"
 bash RESTORE_EMERGENCY.sh
 ```
 
-Le script :
-1. Te demande le mot de passe restic (trousseau système, Proton Pass, ou mémoire)
-2. Affiche la liste des sauvegardes disponibles (`restic snapshots`)
-3. Te laisse choisir laquelle restaurer (vide = la plus récente)
-4. Restaure dans `~/.thunderbird-restored-<date>` — jamais en écrasant l'actif
+The script:
+1. Asks for the restic password (system keyring, Proton Pass, or memory)
+2. Lists the available backups (`restic snapshots`)
+3. Lets you pick which one to restore (empty = most recent)
+4. Restores to `~/.thunderbird-restored-<date>` — never overwriting the active profile
 
-Pour ne récupérer qu'un élément précis (un dossier, un fichier) sans tout
-restaurer :
+To recover just one specific item (a folder, a file) without restoring
+everything:
 ```bash
-export RESTIC_PASSWORD='ton_mot_de_passe'
-restic -r "/run/media/$USER/<NOM_DISQUE>/Backup Thunderbird/restic-repo" \
-  restore latest --target /tmp/restauration_partielle \
-  --include "*.thunderbird/ImapMail/nom_du_dossier*"
+export RESTIC_PASSWORD='your_password'
+restic -r "/run/media/$USER/<DISK_NAME>/Backup Thunderbird/restic-repo" \
+  restore latest --target /tmp/partial_restore \
+  --include "*.thunderbird/ImapMail/folder_name*"
 ```
 
-Pour explorer le contenu d'une sauvegarde sans rien extraire (montage FUSE
-en lecture seule) :
+To browse a backup's content without extracting anything (read-only FUSE
+mount):
 ```bash
 mkdir -p /tmp/tb-browse
-restic -r "/run/media/$USER/<NOM_DISQUE>/Backup Thunderbird/restic-repo" mount /tmp/tb-browse
-# navigue dans /tmp/tb-browse/snapshots/... puis Ctrl+C pour démonter
+restic -r "/run/media/$USER/<DISK_NAME>/Backup Thunderbird/restic-repo" mount /tmp/tb-browse
+# browse /tmp/tb-browse/snapshots/... then Ctrl+C to unmount
 ```
 
 ---
 
-## Scénario 2 — Catastrophe totale : PC mort, Kubuntu réinstallé
+## Scenario 2 — Total disaster: dead PC, reinstalled OS
 
-### Étape 0 — Avant de commencer : le mot de passe
+### Step 0 — Before you start: the password
 
-Sans le mot de passe du dépôt restic, **aucune récupération n'est possible**
-— c'est un vrai chiffrement AES-256, pas de porte dérobée. Cherche-le dans
-l'ordre :
-1. **Proton Pass** (app mobile ou web, si tu l'as configuré) — survit à la
-   mort du PC puisqu'il est synchronisé sur les serveurs Proton
-2. Une copie papier si tu en as fait une
-3. Ta mémoire
+Without the restic repository password, **no recovery is possible** —
+this is real AES-256 encryption, no backdoor. Look for it in this order:
+1. **Proton Pass** (mobile or web app, if you set it up) — survives the
+   PC dying since it's synced to Proton's servers
+2. A paper backup, if you made one
+3. Your memory
 
-Si aucune des trois ne fonctionne, arrête-toi ici : ni moi ni personne ne
-peut déchiffrer le dépôt sans ce mot de passe.
+If none of the three work, stop here: neither I nor anyone else can
+decrypt the repository without this password.
 
-### Étape 1 — Réinstaller les paquets nécessaires
+### Step 1 — Reinstall the required packages
 
-Seul `restic` est un vrai prérequis pour restaurer les données — la
-restauration elle-même (localiser le disque, extraire les fichiers) ne
-touche jamais à Thunderbird. **Thunderbird n'est nécessaire qu'à la toute
-dernière étape**, pour rouvrir le profil une fois restauré — tu peux
-l'installer avant, après, ou pendant que la restauration tourne, l'ordre
-n'a aucune importance technique.
+Only `restic` is a real prerequisite to restore the data — the restore
+itself (locating the disk, extracting files) never touches Thunderbird.
+**Thunderbird is only needed at the very last step**, to reopen the
+profile once restored — you can install it before, after, or while the
+restore is running, install order has no technical importance.
 
-Si tu as accès à internet sur la nouvelle installation :
+If you have internet access on the new install:
 ```bash
 sudo apt update
 sudo apt install restic thunderbird
 ```
 
-Si tu n'as **pas** accès à internet (ou que `apt install restic` échoue), le
-binaire restic officiel est déjà sur le disque de sauvegarde — voir Scénario 3.
-Thunderbird, lui, peut attendre d'avoir de nouveau internet si besoin,
-puisqu'il n'est requis qu'à la fin.
+If you **don't** have internet access (or `apt install restic` fails),
+the official restic binary is already on the backup disk — see Scenario 3.
+Thunderbird itself can wait until you have internet again if needed,
+since it's only required at the end.
 
-### Étape 2 — Brancher le disque et le localiser
+### Step 2 — Plug in the disk and locate it
 
-Le point de montage automatique varie selon la version d'Ubuntu/l'environnement
-de bureau (KDE monte souvent sous `/run/media/`, d'autres sous `/media/`) :
+The automatic mount point varies depending on the Ubuntu version/desktop
+environment (KDE usually mounts under `/run/media/`, others under
+`/media/`):
 ```bash
 ls /run/media/$USER/ 2>/dev/null
 ls /media/$USER/ 2>/dev/null
 ```
-Repère le dossier `Backup Thunderbird` sur le disque `<NOM_DISQUE>`.
+Look for the `Backup Thunderbird` folder on the `<DISK_NAME>` disk.
 
-### Étape 3 — Restaurer
+### Step 3 — Restore
 
 ```bash
-cd "/chemin/trouvé/à/l'étape/2/Backup Thunderbird"
+cd "/path/found/in/step/2/Backup Thunderbird"
 bash RESTORE_EMERGENCY.sh
 ```
 
-Le script détecte lui-même si `restic` est absent du système et bascule
-automatiquement sur le binaire embarqué (`restic-bin/restic` à côté du
-script) — aucune action supplémentaire de ta part.
+The script detects on its own whether `restic` is missing from the
+system and automatically falls back to the bundled binary
+(`restic-bin/restic` next to the script) — no extra action needed on
+your part.
 
-### Étape 4 — Vérifier avant de basculer
+### Step 4 — Check before switching over
 
-Les fichiers sont dans `~/.thunderbird-restored-<date>`. Vérifie que ça a
-l'air complet (taille cohérente avec tes sauvegardes habituelles, dossiers
-de mails présents) avant de continuer.
+The files are in `~/.thunderbird-restored-<date>`. Check that it looks
+complete (size consistent with your usual backups, mail folders present)
+before continuing.
 
-### Étape 5 — Activer le profil restauré
+### Step 5 — Activate the restored profile
 
 ```bash
 pkill -x thunderbird 2>/dev/null || true
@@ -116,19 +118,19 @@ mv ~/.thunderbird-restored-<date>/.thunderbird ~/.thunderbird
 thunderbird &
 ```
 
-Le nom d'utilisateur Linux de la nouvelle installation peut être différent
-de celui d'origine — aucun problème, tout le processus utilise `$HOME`
-dynamiquement, et la sauvegarde elle-même ne contient aucun chemin absolu
-ni nom d'utilisateur (voir `thunderbird_guardian.py::do_backup`).
+The new install's Linux username can be different from the original one
+— no problem, the whole process relies on `$HOME` dynamically, and the
+backup itself contains no absolute path or username (see
+`thunderbird_guardian.py::do_backup`).
 
 ---
 
-## Scénario 3 — `restic` introuvable ET le binaire embarqué a disparu/est corrompu
+## Scenario 3 — `restic` not found AND the bundled binary is missing/corrupted
 
-Télécharge le binaire officiel statique (aucune dépendance système, tourne
-sur n'importe quelle distribution Linux x86-64) **avec vérification du
-checksum avant utilisation** — ne jamais exécuter un binaire téléchargé sans
-vérifier qu'il correspond exactement à ce que restic a publié :
+Download the official static binary (no system dependency, runs on any
+x86-64 Linux distribution) **with checksum verification before use** —
+never run a downloaded binary without checking that it exactly matches
+what restic actually published:
 
 ```bash
 API=$(curl -s https://api.github.com/repos/restic/restic/releases/latest)
@@ -142,54 +144,54 @@ EXPECTED=$(grep "linux_amd64.bz2" SHA256SUMS | awk '{print $1}')
 ACTUAL=$(sha256sum restic.bz2 | awk '{print $1}')
 
 if [ "$EXPECTED" != "$ACTUAL" ]; then
-    echo "❌ Checksum invalide — fichier corrompu ou compromis, NE PAS UTILISER"
+    echo "❌ Invalid checksum — file is corrupted or compromised, DO NOT USE"
     exit 1
 fi
-echo "✅ Checksum vérifié : $ACTUAL"
+echo "✅ Checksum verified: $ACTUAL"
 
 bunzip2 restic.bz2
 chmod +x restic
 sudo mv restic /usr/local/bin/restic
 ```
 
-Nécessite un accès internet sur la machine de secours. Le script utilise
-uniquement `curl`/`grep`/`awk`/`sha256sum` (aucune dépendance à `jq` ou autre
-outil qui pourrait manquer sur une installation fraîche).
+Requires internet access on the recovery machine. The script only uses
+`curl`/`grep`/`awk`/`sha256sum` (no dependency on `jq` or any other tool
+that might be missing on a fresh install).
 
 ---
 
-## Scénario 4 — Le disque de sauvegarde montre des signes de défaillance
+## Scenario 4 — The backup disk shows signs of failure
 
-Si le disque a des erreurs de lecture (ralentissements anormaux, erreurs
-`Input/output error`) : **ne lance aucune
-opération d'écriture dessus** (ni backup, ni `restic forget`/`prune`). Fais
-d'abord une image bit-à-bit sur un disque sain avant toute autre tentative :
+If the disk has read errors (unusual slowdowns, `Input/output error`):
+**don't run any write operation on it** (no backup, no `restic
+forget`/`prune`). First make a bit-for-bit image onto a healthy disk
+before trying anything else:
 
 ```bash
-sudo ddrescue -d -r3 /dev/sdX /chemin/vers/nouveau/disque/image.img /chemin/vers/mapfile.log
+sudo ddrescue -d -r3 /dev/sdX /path/to/new/disk/image.img /path/to/mapfile.log
 ```
 
-Puis travaille sur la copie, jamais sur le disque défaillant original.
+Then work from the copy, never on the original failing disk.
 
 ---
 
-## Scénario 5 — Vérifier l'état du dépôt sans restaurer
+## Scenario 5 — Checking the repository's health without restoring
 
 ```bash
-export RESTIC_PASSWORD='ton_mot_de_passe'
-restic -r "/run/media/$USER/<NOM_DISQUE>/Backup Thunderbird/restic-repo" snapshots
-restic -r "/run/media/$USER/<NOM_DISQUE>/Backup Thunderbird/restic-repo" check --read-data
+export RESTIC_PASSWORD='your_password'
+restic -r "/run/media/$USER/<DISK_NAME>/Backup Thunderbird/restic-repo" snapshots
+restic -r "/run/media/$USER/<DISK_NAME>/Backup Thunderbird/restic-repo" check --read-data
 ```
-Équivalent à `python3 thunderbird_guardian.py --verify` si le venv du projet
-est disponible sur la machine.
+Equivalent to `python3 thunderbird_guardian.py --verify` if the project's
+venv is available on the machine.
 
 ---
 
-## Ce qui ne peut PAS arriver à cette sauvegarde
+## What CANNOT happen to this backup
 
-- **Mot de passe oublié** : ce n'est pas un bug à corriger — c'est le
-  fonctionnement voulu d'un vrai chiffrement AES-256. La seule protection
-  est d'avoir une copie durable du mot de passe (voir Scénario 2, étape 0).
-- **Changement de nom d'utilisateur Linux ou de machine** : aucun impact,
-  tout repose sur `$HOME` et sur le disque externe, jamais sur une donnée
-  propre à l'ancienne installation.
+- **Forgotten password**: this isn't a bug to fix — it's the intended
+  behavior of real AES-256 encryption. The only protection is keeping a
+  durable copy of the password (see Scenario 2, step 0).
+- **Change of Linux username or machine**: no impact, everything relies
+  on `$HOME` and the external disk, never on data specific to the
+  original install.
