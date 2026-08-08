@@ -75,7 +75,7 @@ flowchart TD
     D --> E["Choix du snapshot à restaurer"]
     E --> F["restic restore → dossier horodaté"]
     F --> G["Vérification manuelle du contenu"]
-    G --> H["mv vers ~/.thunderbird"]
+    G --> H["mv vers ~/<profile>"]
     H --> I["thunderbird &"]
 ```
 
@@ -273,7 +273,9 @@ restic -r "/chemin/vers/Backup Thunderbird/restic-repo" snapshots
 ### Principe de sécurité
 
 **Rien n'est jamais écrasé automatiquement.** La restauration écrit toujours
-dans un dossier neuf et horodaté (`~/.thunderbird-restored-<date>`), jamais
+dans un dossier neuf et horodaté (`~/<profile>-restored-<date>`, où
+`<profile>` est le nom de ton dossier de profil Thunderbird — `.thunderbird`
+par défaut, sauf si tu as personnalisé `TB_SOURCE_DIR`), jamais
 directement sur ton profil actif. Tu vérifies le résultat, puis c'est toi
 qui bascules manuellement en une commande `mv`. Si quelque chose se passe
 mal, ton ancien profil (ou l'absence de profil) n'a pas bougé.
@@ -307,7 +309,7 @@ bash RESTORE_EMERGENCY.sh
 - Il affiche la liste des sauvegardes disponibles (`restic snapshots`),
   avec leur date.
 - Il te demande quel snapshot restaurer (Entrée = le plus récent).
-- Il restaure dans `~/.thunderbird-restored-<date>` et t'indique le chemin
+- Il restaure dans `~/<profile>-restored-<date>` et t'indique le chemin
   exact où se trouve le profil restauré une fois l'opération terminée.
 
 **4. Vérifier avant de basculer**
@@ -322,8 +324,8 @@ adaptées à ton `$HOME` réel et au nom exact de ton dossier de profil. Dans
 les grandes lignes :
 ```bash
 pkill -x thunderbird 2>/dev/null || true
-mv ~/.thunderbird ~/.thunderbird.old_<date>       # garde l'actif de côté, au cas où
-mv ~/.thunderbird-restored-<date>/.thunderbird ~/.thunderbird
+mv ~/<profile> ~/<profile>.old_<date>       # garde l'actif de côté, au cas où
+mv ~/<profile>-restored-<date>/<profile> ~/<profile>
 thunderbird &
 ```
 

@@ -7,9 +7,11 @@ repository, from the simplest case (a mistake) to the worst case (dead
 PC, reinstalled OS, recovery disk on an unfamiliar machine).
 
 **Safety principle in every case**: a restore always writes to a separate
-folder (`~/.thunderbird-restored-<date>`), never directly onto
-`~/.thunderbird`. Nothing is overwritten until you've checked the result
-and done the switch-over yourself.
+folder (`~/<profile>-restored-<date>`, where `<profile>` is your
+Thunderbird profile folder's name — `.thunderbird` by default, unless you
+customized `TB_SOURCE_DIR`), never directly onto `~/<profile>`. Nothing is
+overwritten until you've checked the result and done the switch-over
+yourself.
 
 ---
 
@@ -27,7 +29,7 @@ The script:
 1. Asks for the restic password (system keyring, Proton Pass, or memory)
 2. Lists the available backups (`restic snapshots`)
 3. Lets you pick which one to restore (empty = most recent)
-4. Restores to `~/.thunderbird-restored-<date>` — never overwriting the active profile
+4. Restores to `~/<profile>-restored-<date>` — never overwriting the active profile
 
 To recover just one specific item (a folder, a file) without restoring
 everything:
@@ -106,7 +108,7 @@ your part.
 
 ### Step 4 — Check before switching over
 
-The files are in `~/.thunderbird-restored-<date>`. Check that it looks
+The files are in `~/<profile>-restored-<date>`. Check that it looks
 complete (size consistent with your usual backups, mail folders present)
 before continuing.
 
@@ -114,7 +116,7 @@ before continuing.
 
 ```bash
 pkill -x thunderbird 2>/dev/null || true
-mv ~/.thunderbird-restored-<date>/.thunderbird ~/.thunderbird
+mv ~/<profile>-restored-<date>/<profile> ~/<profile>
 thunderbird &
 ```
 

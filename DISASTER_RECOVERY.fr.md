@@ -7,9 +7,11 @@ restic, du cas le plus simple (erreur de manipulation) au pire cas (PC mort,
 OS réinstallé, disque de secours à récupérer sur une machine inconnue).
 
 **Principe de sécurité dans tous les cas** : la restauration écrit toujours
-dans un dossier séparé (`~/.thunderbird-restored-<date>`), jamais directement
-sur `~/.thunderbird`. Rien n'est écrasé tant que tu n'as pas vérifié le
-résultat et fait le basculement toi-même.
+dans un dossier séparé (`~/<profile>-restored-<date>`, où `<profile>` est
+le nom de ton dossier de profil Thunderbird — `.thunderbird` par défaut,
+sauf si tu as personnalisé `TB_SOURCE_DIR`), jamais directement sur
+`~/<profile>`. Rien n'est écrasé tant que tu n'as pas vérifié le résultat
+et fait le basculement toi-même.
 
 ---
 
@@ -27,7 +29,7 @@ Le script :
 1. Te demande le mot de passe restic (trousseau système, Proton Pass, ou mémoire)
 2. Affiche la liste des sauvegardes disponibles (`restic snapshots`)
 3. Te laisse choisir laquelle restaurer (vide = la plus récente)
-4. Restaure dans `~/.thunderbird-restored-<date>` — jamais en écrasant l'actif
+4. Restaure dans `~/<profile>-restored-<date>` — jamais en écrasant l'actif
 
 Pour ne récupérer qu'un élément précis (un dossier, un fichier) sans tout
 restaurer :
@@ -106,7 +108,7 @@ script) — aucune action supplémentaire de ta part.
 
 ### Étape 4 — Vérifier avant de basculer
 
-Les fichiers sont dans `~/.thunderbird-restored-<date>`. Vérifie que ça a
+Les fichiers sont dans `~/<profile>-restored-<date>`. Vérifie que ça a
 l'air complet (taille cohérente avec tes sauvegardes habituelles, dossiers
 de mails présents) avant de continuer.
 
@@ -114,7 +116,7 @@ de mails présents) avant de continuer.
 
 ```bash
 pkill -x thunderbird 2>/dev/null || true
-mv ~/.thunderbird-restored-<date>/.thunderbird ~/.thunderbird
+mv ~/<profile>-restored-<date>/<profile> ~/<profile>
 thunderbird &
 ```
 

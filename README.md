@@ -77,7 +77,7 @@ flowchart TD
     D --> E["Choose snapshot to restore"]
     E --> F["restic restore → timestamped folder"]
     F --> G["Manual content check"]
-    G --> H["mv to ~/.thunderbird"]
+    G --> H["mv to ~/<profile>"]
     H --> I["thunderbird &"]
 ```
 
@@ -273,8 +273,10 @@ restic -r "/path/to/Backup Thunderbird/restic-repo" snapshots
 ### Safety principle
 
 **Nothing is ever overwritten automatically.** A restore always writes to
-a fresh, timestamped folder (`~/.thunderbird-restored-<date>`), never
-directly onto your active profile. You check the result, then you
+a fresh, timestamped folder (`~/<profile>-restored-<date>`, where
+`<profile>` is your Thunderbird profile folder's name — `.thunderbird` by
+default, unless you customized `TB_SOURCE_DIR`), never directly onto your
+active profile. You check the result, then you
 manually switch over with a single `mv` command. If anything goes wrong,
 your old profile (or the lack of one) hasn't moved.
 
@@ -307,7 +309,7 @@ bash RESTORE_EMERGENCY.sh
   this PC no longer exists — see FAQ).
 - It lists the available backups (`restic snapshots`), with their dates.
 - It asks which snapshot to restore (Enter = most recent).
-- It restores to `~/.thunderbird-restored-<date>` and tells you the
+- It restores to `~/<profile>-restored-<date>` and tells you the
   exact path to the restored profile once done.
 
 **4. Check before switching over**
@@ -322,8 +324,8 @@ adapted to your real `$HOME` and the exact name of your profile folder.
 Roughly:
 ```bash
 pkill -x thunderbird 2>/dev/null || true
-mv ~/.thunderbird ~/.thunderbird.old_<date>       # keep the active one aside, just in case
-mv ~/.thunderbird-restored-<date>/.thunderbird ~/.thunderbird
+mv ~/<profile> ~/<profile>.old_<date>       # keep the active one aside, just in case
+mv ~/<profile>-restored-<date>/<profile> ~/<profile>
 thunderbird &
 ```
 
