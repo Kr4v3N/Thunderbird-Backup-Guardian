@@ -75,20 +75,15 @@ class Config:
 
 
 def resolve_dest_dir() -> Path:
-    """TB_BACKUP_DIR en priorité, sinon auto-détection, sinon repli sur le home."""
+    """TB_BACKUP_DIR en priorité, sinon repli générique sur le home.
+
+    Aucune tentative de deviner le nom d'un disque externe : ça ne
+    généraliserait à personne d'autre. Si tu sauvegardes sur un disque
+    externe, définis TB_BACKUP_DIR explicitement (voir
+    CONFIGURATION_REPERTOIRE.md)."""
     env_dir = os.getenv("TB_BACKUP_DIR", "").strip()
     if env_dir:
         return Path(env_dir)
-
-    user = os.getenv("USER") or Path.home().name
-    candidates = [
-        Path(f"/run/media/{user}/Disk_1/Backup Thunderbird"),
-        Path(f"/media/{user}/Disk_1/Backup Thunderbird"),
-        Path.home() / "thunderbird_backups",
-    ]
-    for path in candidates:
-        if path.parent.exists():
-            return path
     return Path.home() / "thunderbird_backups"
 
 

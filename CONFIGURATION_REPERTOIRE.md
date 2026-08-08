@@ -2,23 +2,16 @@
 
 ## Comment le script choisit sa destination
 
-`resolve_dest_dir()` dans `thunderbird_guardian.py` suit cet ordre, dans
-cette priorité :
+`resolve_dest_dir()` dans `thunderbird_guardian.py` suit une logique simple,
+volontairement sans magie :
 
-1. **Variable d'environnement `TB_BACKUP_DIR`**, si définie — prioritaire,
-   sans exception.
-2. **Auto-détection**, dans l'ordre :
-   - `/run/media/$USER/Disk_1/Backup Thunderbird`
-   - `/media/$USER/Disk_1/Backup Thunderbird`
-   - `~/thunderbird_backups`
+1. **Variable d'environnement `TB_BACKUP_DIR`**, si définie — utilisée telle
+   quelle, sans exception.
+2. **Repli** : `~/thunderbird_backups`, si `TB_BACKUP_DIR` n'est pas définie.
 
-   Le premier chemin dont le *parent* existe est retenu (le dossier final
-   `Backup Thunderbird` est créé s'il n'existe pas encore).
-3. **Repli final** : `~/thunderbird_backups` si rien d'autre n'a matché.
-
-Les deux préfixes `/run/media/` et `/media/` sont testés parce que le point
-de montage automatique d'un disque externe varie selon l'environnement de
-bureau (KDE monte généralement sous `/run/media/`, d'autres sous `/media/`).
+Le script ne tente **pas** de deviner le nom d'un disque externe — un nom
+de disque est propre à chaque installation, rien à généraliser. Si tu
+sauvegardes sur un disque externe, définis `TB_BACKUP_DIR` explicitement.
 
 ## Vérifier où le script sauvegarde actuellement
 
@@ -30,17 +23,25 @@ Cherche cette ligne dans les logs :
 ✅ Destination: /chemin/vers/repertoire
 ```
 
-## Changer la destination
+## Configurer un disque externe comme destination
+
+Le point de montage automatique d'un disque externe varie selon
+l'environnement de bureau (KDE monte généralement sous `/run/media/`,
+d'autres sous `/media/`) — vérifie le tien :
+```bash
+ls /run/media/$USER/ 2>/dev/null
+ls /media/$USER/ 2>/dev/null
+```
 
 ### Temporaire (session courante)
 ```bash
-export TB_BACKUP_DIR="/media/$USER/Disk_1/Backup Thunderbird"
+export TB_BACKUP_DIR="/media/$USER/<NOM_DISQUE>/Backup Thunderbird"
 .venv/bin/python3 thunderbird_guardian.py
 ```
 
 ### Permanent
 ```bash
-echo 'export TB_BACKUP_DIR="/media/$USER/Disk_1/Backup Thunderbird"' >> ~/.bashrc
+echo 'export TB_BACKUP_DIR="/media/$USER/<NOM_DISQUE>/Backup Thunderbird"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
@@ -49,17 +50,19 @@ source ~/.bashrc
 crontab -e
 ```
 ```
-TB_BACKUP_DIR="/media/$USER/Disk_1/Backup Thunderbird"
+TB_BACKUP_DIR="/media/$USER/<NOM_DISQUE>/Backup Thunderbird"
 40 18 * * * export DISPLAY=:0 && ... && .venv/bin/python3 thunderbird_guardian.py
 ```
+Une variable définie en tête de crontab s'applique à toutes les lignes qui
+suivent — nécessaire ici puisque cron ne charge pas `~/.bashrc`.
 
 ## 🐛 DÉPANNAGE
 
 ### Le disque n'existe pas ?
 ```bash
-ls -la "/media/$USER/Disk_1/Backup Thunderbird"
-mkdir -p "/media/$USER/Disk_1/Backup Thunderbird"
-chmod 700 "/media/$USER/Disk_1/Backup Thunderbird"
+ls -la "/media/$USER/<NOM_DISQUE>/Backup Thunderbird"
+mkdir -p "/media/$USER/<NOM_DISQUE>/Backup Thunderbird"
+chmod 700 "/media/$USER/<NOM_DISQUE>/Backup Thunderbird"
 ```
 
 ### Le script attend le disque puis abandonne
@@ -72,8 +75,8 @@ le disque est bien branché et monté avant l'heure programmée, ou augmente
 
 ### Vérification finale
 ```bash
-test -d "/media/$USER/Disk_1/Backup Thunderbird" && echo "✅ OK" || echo "❌ MANQUANT"
-test -w "/media/$USER/Disk_1/Backup Thunderbird" && echo "✅ ÉCRITURE OK" || echo "❌ PAS DE DROITS"
+test -d "/media/$USER/<NOM_DISQUE>/Backup Thunderbird" && echo "✅ OK" || echo "❌ MANQUANT"
+test -w "/media/$USER/<NOM_DISQUE>/Backup Thunderbird" && echo "✅ ÉCRITURE OK" || echo "❌ PAS DE DROITS"
 
 export TB_LOG_LEVEL=DEBUG
 .venv/bin/python3 thunderbird_guardian.py

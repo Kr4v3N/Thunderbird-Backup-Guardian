@@ -17,7 +17,7 @@ Le PC actuel fonctionne, le disque de sauvegarde est branché, tu veux juste
 revenir en arrière (mail supprimé par erreur, dossier corrompu...).
 
 ```bash
-cd "/run/media/$USER/Disk_1/Backup Thunderbird"
+cd "/run/media/$USER/<NOM_DISQUE>/Backup Thunderbird"
 bash RESTORE_EMERGENCY.sh
 ```
 
@@ -31,7 +31,7 @@ Pour ne récupérer qu'un élément précis (un dossier, un fichier) sans tout
 restaurer :
 ```bash
 export RESTIC_PASSWORD='ton_mot_de_passe'
-restic -r "/run/media/$USER/Disk_1/Backup Thunderbird/restic-repo" \
+restic -r "/run/media/$USER/<NOM_DISQUE>/Backup Thunderbird/restic-repo" \
   restore latest --target /tmp/restauration_partielle \
   --include "*.thunderbird/ImapMail/nom_du_dossier*"
 ```
@@ -40,7 +40,7 @@ Pour explorer le contenu d'une sauvegarde sans rien extraire (montage FUSE
 en lecture seule) :
 ```bash
 mkdir -p /tmp/tb-browse
-restic -r "/run/media/$USER/Disk_1/Backup Thunderbird/restic-repo" mount /tmp/tb-browse
+restic -r "/run/media/$USER/<NOM_DISQUE>/Backup Thunderbird/restic-repo" mount /tmp/tb-browse
 # navigue dans /tmp/tb-browse/snapshots/... puis Ctrl+C pour démonter
 ```
 
@@ -89,7 +89,7 @@ de bureau (KDE monte souvent sous `/run/media/`, d'autres sous `/media/`) :
 ls /run/media/$USER/ 2>/dev/null
 ls /media/$USER/ 2>/dev/null
 ```
-Repère le dossier `Backup Thunderbird` sur le disque `Disk_1`.
+Repère le dossier `Backup Thunderbird` sur le disque `<NOM_DISQUE>`.
 
 ### Étape 3 — Restaurer
 
@@ -161,7 +161,7 @@ outil qui pourrait manquer sur une installation fraîche).
 ## Scénario 4 — Le disque de sauvegarde montre des signes de défaillance
 
 Si le disque a des erreurs de lecture (ralentissements anormaux, erreurs
-`Input/output error`, comme observé le 25/07/2026) : **ne lance aucune
+`Input/output error`) : **ne lance aucune
 opération d'écriture dessus** (ni backup, ni `restic forget`/`prune`). Fais
 d'abord une image bit-à-bit sur un disque sain avant toute autre tentative :
 
@@ -177,8 +177,8 @@ Puis travaille sur la copie, jamais sur le disque défaillant original.
 
 ```bash
 export RESTIC_PASSWORD='ton_mot_de_passe'
-restic -r "/run/media/$USER/Disk_1/Backup Thunderbird/restic-repo" snapshots
-restic -r "/run/media/$USER/Disk_1/Backup Thunderbird/restic-repo" check --read-data
+restic -r "/run/media/$USER/<NOM_DISQUE>/Backup Thunderbird/restic-repo" snapshots
+restic -r "/run/media/$USER/<NOM_DISQUE>/Backup Thunderbird/restic-repo" check --read-data
 ```
 Équivalent à `python3 thunderbird_guardian.py --verify` si le venv du projet
 est disponible sur la machine.

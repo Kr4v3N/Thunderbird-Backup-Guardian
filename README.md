@@ -6,7 +6,7 @@ Chiffrement AES-256 réel (restic) · déduplication · vérification d'intégri
 
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
 ![restic](https://img.shields.io/badge/backend-restic-orange)
-![Statut](https://img.shields.io/badge/statut-priv%C3%A9%2Fusage%20personnel-lightgrey)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -204,7 +204,7 @@ sauvegarde présente (`restic snapshots`).
 
 | Variable | Défaut | Description |
 |----------|--------|--------------|
-| `TB_BACKUP_DIR` | Auto-détecté | Répertoire de destination (priorité absolue) |
+| `TB_BACKUP_DIR` | `~/thunderbird_backups` | Répertoire de destination (aucune auto-détection de disque) |
 | `TB_SOURCE_DIR` | `~/.thunderbird` | Répertoire source |
 | `TB_KEEP_DAILY` | `7` | Sauvegardes quotidiennes conservées |
 | `TB_KEEP_WEEKLY` | `4` | Sauvegardes hebdomadaires conservées |
@@ -470,4 +470,7 @@ restauration entièrement autonome et testée en conditions réelles.
 
 ---
 
-*Projet personnel — usage privé, non destiné à la distribution publique.*
+*Né d'un besoin personnel (et d'une découverte peu agréable — voir*
+*[Historique](#historique)*
+*) — partagé sous licence MIT pour quiconque cherche une sauvegarde*
+*Thunderbird réellement chiffrée, pas juste en apparence.*
