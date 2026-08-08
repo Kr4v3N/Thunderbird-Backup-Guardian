@@ -15,3 +15,6 @@
 # Artefacts Python régénérables
 __pycache__/
 *.pyc
+
+# Carnet de bord local, pas destiné au partage public
+todo.md
