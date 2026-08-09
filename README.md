@@ -445,15 +445,22 @@ bit-for-bit image onto a healthy drive (`ddrescue`), then work from the
 copy. Detail in [DISASTER_RECOVERY.md](DISASTER_RECOVERY.md#scenario-4--the-backup-disk-shows-signs-of-failure).
 
 **Has this restore script actually been tested, or just written?**
-Tested through real execution, not just reviewed: a throwaway restic
-repository was created with real test data, restored end to end via
-`RESTORE_EMERGENCY.sh`, with a bit-for-bit comparison (`diff -r`)
-confirming a perfect match between original and restored — both with the
-system `restic` and with the bundled fallback binary (PATH without
-`restic`, simulated explicitly). Two real bugs were found and fixed
-during this test: an incorrect restore path, and a hardcoded username
-that would otherwise have ended up in the repository and generated
-scripts.
+Tested twice, through real execution, not just reviewed. First on a
+throwaway restic repository with synthetic test data, restored end to end
+via `RESTORE_EMERGENCY.sh`, with a bit-for-bit comparison (`diff -r`)
+confirming a perfect match — both with the system `restic` and with the
+bundled fallback binary (PATH without `restic`, simulated explicitly).
+Two real bugs were found and fixed during that pass: an incorrect restore
+path, and a hardcoded username that would otherwise have ended up in the
+repository and generated scripts. Second, on a real 14 GB production
+Thunderbird profile: full backup in 3m34s, full restore in 2m39s,
+`diff -r` against the live profile showing only the differences expected
+from Thunderbird actively running during the test (mail index files,
+telemetry) — no data loss. That pass found a third real bug: a stale
+`.parentlock` file, not cleaned up before backup, that could make
+Thunderbird show a false "already running" dialog on the restored copy
+(now fixed — see [History](#history) and
+[DISASTER_RECOVERY.md](DISASTER_RECOVERY.md#scenario-6--thunderbird-says-already-running-on-the-restored-profile)).
 
 ---
 

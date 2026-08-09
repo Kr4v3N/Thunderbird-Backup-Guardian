@@ -447,14 +447,23 @@ d'abord une image bit-à-bit sur un support sain (`ddrescue`), puis travaille
 sur la copie. Détail dans [DISASTER_RECOVERY.fr.md](DISASTER_RECOVERY.fr.md#scénario-4--le-disque-de-sauvegarde-montre-des-signes-de-défaillance).
 
 **Ce script de restauration a-t-il vraiment été testé, ou juste écrit ?**
-Testé en exécution réelle, pas seulement relu : un dépôt restic jetable a
-été créé avec de vraies données de test, restauré de bout en bout via
-`RESTORE_EMERGENCY.sh`, avec comparaison bit-à-bit (`diff -r`) confirmant
-l'identité parfaite entre original et restauré — à la fois avec `restic`
+Testé deux fois, en exécution réelle, pas seulement relu. D'abord sur un
+dépôt restic jetable avec des données de test synthétiques, restauré de
+bout en bout via `RESTORE_EMERGENCY.sh`, avec comparaison bit-à-bit
+(`diff -r`) confirmant l'identité parfaite — à la fois avec `restic`
 système et avec le binaire embarqué en secours (PATH sans `restic` simulé
-explicitement). Deux bugs réels ont été trouvés et corrigés pendant ce
-test : un chemin de restauration incorrect, et un nom d'utilisateur codé
-en dur qui se serait retrouvé dans le dépôt et les scripts générés.
+explicitement). Deux bugs réels trouvés et corrigés lors de cette passe :
+un chemin de restauration incorrect, et un nom d'utilisateur codé en dur
+qui se serait retrouvé dans le dépôt et les scripts générés. Ensuite, sur
+un vrai profil Thunderbird de production (14 Go) : sauvegarde complète en
+3min34, restauration complète en 2min39, `diff -r` contre le profil actif
+ne montrant que les différences attendues du fait que Thunderbird tournait
+en direct pendant le test (fichiers d'index mail, telemetry) — aucune
+perte de données. Cette passe a trouvé un troisième bug réel : un fichier
+`.parentlock` résiduel, jamais nettoyé avant sauvegarde, qui pouvait
+déclencher un faux "déjà en cours d'exécution" sur la copie restaurée
+(corrigé depuis — voir [Historique](#historique) et
+[DISASTER_RECOVERY.fr.md](DISASTER_RECOVERY.fr.md#scénario-6--thunderbird-dit-déjà-en-cours-dexécution-sur-le-profil-restauré)).
 
 ---
 
