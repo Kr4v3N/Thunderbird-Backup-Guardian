@@ -189,6 +189,26 @@ est disponible sur la machine.
 
 ---
 
+## Scénario 6 — Thunderbird dit "déjà en cours d'exécution" sur le profil restauré
+
+```
+Thunderbird est déjà en cours d'exécution, mais ne répond pas. Pour
+utiliser Thunderbird, vous devez d'abord fermer le processus existant,
+redémarrer votre appareil, ou utiliser un autre profil.
+```
+
+Les sauvegardes prises avant ce correctif peuvent contenir un fichier
+`.parentlock` résiduel (le verrou propre de Thunderbird, distinct du
+fichier `lock` — le motif `*.lock` ne le capture pas), copié tel quel
+depuis le profil source. Supprime-le uniquement sur **la copie restaurée**,
+jamais sur ton profil actif :
+```bash
+rm -f ~/<profile>-restored-<date>/<profile>*/.parentlock
+```
+Relance ensuite Thunderbird sur ce profil.
+
+---
+
 ## Ce qui ne peut PAS arriver à cette sauvegarde
 
 - **Mot de passe oublié** : ce n'est pas un bug à corriger — c'est le

@@ -189,6 +189,25 @@ venv is available on the machine.
 
 ---
 
+## Scenario 6 — Thunderbird says "already running" on the restored profile
+
+```
+Thunderbird is already running, but is not responding. To use Thunderbird,
+you must first close the existing Thunderbird process, restart your
+device, or use a different profile.
+```
+
+Backups taken before this got fixed can carry a stale `.parentlock` file
+(Thunderbird's own lock, distinct from the `lock` file — `*.lock` glob
+patterns don't match it) copied straight from the source profile. Remove
+it from the **restored copy only**, never from your live profile:
+```bash
+rm -f ~/<profile>-restored-<date>/<profile>*/.parentlock
+```
+Then launch Thunderbird on that profile again.
+
+---
+
 ## What CANNOT happen to this backup
 
 - **Forgotten password**: this isn't a bug to fix — it's the intended

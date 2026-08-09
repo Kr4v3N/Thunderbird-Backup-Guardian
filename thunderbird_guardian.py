@@ -192,11 +192,16 @@ def close_thunderbird() -> None:
         )
     log.info("✅ Thunderbird closed")
 
-    for lock in Config.SOURCE_DIR.rglob("*.lock"):
-        try:
-            lock.unlink()
-        except OSError:
-            pass
+    # .parentlock isn't cleaned up by a normal shutdown (confirmed by
+    # restoring a real backup and having it trigger Thunderbird's "already
+    # running" false positive) — *.lock alone doesn't match it, since the
+    # glob requires a character before ".lock" and "parentlock" has none.
+    for pattern in ("*.lock", ".parentlock", "lock"):
+        for lock in Config.SOURCE_DIR.rglob(pattern):
+            try:
+                lock.unlink()
+            except OSError:
+                pass
 
 
 def restart_thunderbird() -> None:
