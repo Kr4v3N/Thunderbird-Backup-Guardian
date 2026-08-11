@@ -190,7 +190,7 @@ A backup system that's never been restored is just a hypothesis — see
 crontab -e
 ```
 ```
-40 18 * * * export $(systemctl --user show-environment | grep -E '^(DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS)=') && cd ~/PycharmProjects/Backup-Thunderbird && .venv/bin/python3 thunderbird_guardian.py
+40 18 * * * export XDG_RUNTIME_DIR=/run/user/$(id -u) && export $(systemctl --user show-environment | grep -E '^(DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS)=') && cd ~/PycharmProjects/Backup-Thunderbird && .venv/bin/python3 thunderbird_guardian.py
 ```
 `DISPLAY`/`DBUS_SESSION_BUS_ADDRESS` are required for `notify-send` to
 work from cron (no graphical session attached by default), and
@@ -203,6 +203,18 @@ Thunderbird gets spawned, immediately fails to connect to the display,
 and exits, while the script has no way to tell from a bare `Popen()` call.
 Reading the values live from `systemctl --user show-environment` avoids
 hardcoding a path that changes at every login.
+
+`XDG_RUNTIME_DIR` must be exported *before* that `systemctl --user`
+call, not read from it: under a bare cron environment `XDG_RUNTIME_DIR`
+isn't set either, and `systemctl --user show-environment` itself needs
+it to reach the user's systemd instance — without it the command fails
+silently (stderr only, empty stdout), so `export $(...)` becomes a
+no-op and every one of those four variables stays unset. That specific
+failure surfaces as `keyring.errors.NoKeyringError: No recommended
+backend was available` (see [Troubleshooting](#troubleshooting)), since
+`keyring` then can't reach the SecretService backend either. Unlike
+`XAUTHORITY`, `XDG_RUNTIME_DIR` is safe to hardcode: systemd-logind
+always sets it to `/run/user/<uid>` for the session's lifetime.
 
 **7. Validate the first automatic run**
 Check the next day: notification received (desktop and/or e-mail
@@ -394,6 +406,15 @@ accordingly — see [DIRECTORY_CONFIGURATION.md](DIRECTORY_CONFIGURATION.md).
 grep CRON /var/log/syslog | tail -20
 crontab -l
 ```
+
+**`keyring.errors.NoKeyringError: No recommended backend was available`**
+The crontab line is missing `XDG_RUNTIME_DIR`, or exports it *after* the
+`systemctl --user show-environment` call instead of before — see the
+explanation under [step 6 of Deploying to
+production](#deploying-to-production). Without it, `systemctl --user`
+fails silently and `DISPLAY`/`WAYLAND_DISPLAY`/`XAUTHORITY`/
+`DBUS_SESSION_BUS_ADDRESS` all stay unset, which also takes down
+`keyring`'s access to the SecretService backend.
 
 ---
 

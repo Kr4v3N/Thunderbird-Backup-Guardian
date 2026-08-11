@@ -51,7 +51,7 @@ crontab -e
 ```
 ```
 TB_BACKUP_DIR="/media/$USER/<DISK_NAME>/Backup Thunderbird"
-40 18 * * * export $(systemctl --user show-environment | grep -E '^(DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS)=') && cd ~/PycharmProjects/Backup-Thunderbird && .venv/bin/python3 thunderbird_guardian.py
+40 18 * * * export XDG_RUNTIME_DIR=/run/user/$(id -u) && export $(systemctl --user show-environment | grep -E '^(DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS)=') && cd ~/PycharmProjects/Backup-Thunderbird && .venv/bin/python3 thunderbird_guardian.py
 ```
 A variable set at the top of the crontab applies to every line below it
 — necessary here since cron doesn't load `~/.bashrc`.
@@ -72,6 +72,13 @@ automatically retries (`TB_MOUNT_RETRY_ATTEMPTS` / `TB_MOUNT_RETRY_DELAY`,
 30 min of margin by default) before sending a failure alert. Check that
 the disk is actually plugged in and mounted before the scheduled time, or
 increase `TB_MOUNT_RETRY_DELAY`/`TB_MOUNT_RETRY_ATTEMPTS`.
+
+### `keyring.errors.NoKeyringError` under cron
+
+Not a directory/mount issue — the crontab line above is missing
+`XDG_RUNTIME_DIR` (or exports it after, not before, the
+`systemctl --user show-environment` call). See the full explanation in
+[README.md](README.md#deploying-to-production) / [README.fr.md](README.fr.md#déploiement-en-production), step 6.
 
 ### Final check
 ```bash
