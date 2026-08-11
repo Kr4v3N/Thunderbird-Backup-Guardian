@@ -51,7 +51,7 @@ crontab -e
 ```
 ```
 TB_BACKUP_DIR="/media/$USER/<DISK_NAME>/Backup Thunderbird"
-40 18 * * * export DISPLAY=:0 && ... && .venv/bin/python3 thunderbird_guardian.py
+40 18 * * * export $(systemctl --user show-environment | grep -E '^(DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS)=') && cd ~/PycharmProjects/Backup-Thunderbird && .venv/bin/python3 thunderbird_guardian.py
 ```
 A variable set at the top of the crontab applies to every line below it
 — necessary here since cron doesn't load `~/.bashrc`.

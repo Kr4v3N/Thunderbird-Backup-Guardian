@@ -18,11 +18,13 @@ Chiffrement AES-256 réel (restic) · déduplication · vérification d'intégri
 - [Architecture](#architecture)
 - [Prérequis](#prérequis)
 - [Installation](#installation)
+- [Structure du projet](#structure-du-projet)
 - [Déploiement en production](#déploiement-en-production)
 - [Configuration](#configuration)
 - [Utilisation quotidienne](#utilisation-quotidienne)
 - [Sécurité](#sécurité)
 - [🆘 Restauration](#-restauration--guide-détaillé)
+- [Dépannage](#dépannage)
 - [FAQ](#faq)
 - [Historique](#historique)
 
@@ -189,11 +191,21 @@ Un système de sauvegarde jamais restauré n'est qu'une hypothèse — voir
 crontab -e
 ```
 ```
-40 18 * * * export DISPLAY=:0 && export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus && cd ~/PycharmProjects/Backup-Thunderbird && .venv/bin/python3 thunderbird_guardian.py
+40 18 * * * export $(systemctl --user show-environment | grep -E '^(DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS)=') && cd ~/PycharmProjects/Backup-Thunderbird && .venv/bin/python3 thunderbird_guardian.py
 ```
 `DISPLAY`/`DBUS_SESSION_BUS_ADDRESS` sont nécessaires pour que
 `notify-send` fonctionne depuis un cron (pas de session graphique attachée
-par défaut).
+par défaut), et `XAUTHORITY` est nécessaire pour que Thunderbird lui-même
+puisse se reconnecter à l'affichage lors de son redémarrage après la
+sauvegarde. Coder en dur `DISPLAY=:0` sans `XAUTHORITY` peut fonctionner
+sur certaines configurations mais échoue silencieusement sous
+Wayland/XWayland, où le vrai fichier d'autorisation X11 se trouve à un
+chemin aléatoire (`/run/user/<uid>/xauth_XXXXXX`) plutôt qu'au
+`~/.Xauthority` par défaut — Thunderbird est bien lancé, échoue aussitôt à
+se connecter à l'affichage, puis se termine, sans que le script ne puisse
+le détecter avec un simple appel `Popen()`. Lire les valeurs en direct via
+`systemctl --user show-environment` évite de coder en dur un chemin qui
+change à chaque connexion.
 
 **7. Valider le premier run automatique**
 Vérifie le lendemain : notification reçue (desktop et/ou e-mail selon le

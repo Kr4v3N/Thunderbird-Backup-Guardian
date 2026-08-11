@@ -190,10 +190,19 @@ A backup system that's never been restored is just a hypothesis — see
 crontab -e
 ```
 ```
-40 18 * * * export DISPLAY=:0 && export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus && cd ~/PycharmProjects/Backup-Thunderbird && .venv/bin/python3 thunderbird_guardian.py
+40 18 * * * export $(systemctl --user show-environment | grep -E '^(DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS)=') && cd ~/PycharmProjects/Backup-Thunderbird && .venv/bin/python3 thunderbird_guardian.py
 ```
 `DISPLAY`/`DBUS_SESSION_BUS_ADDRESS` are required for `notify-send` to
-work from cron (no graphical session attached by default).
+work from cron (no graphical session attached by default), and
+`XAUTHORITY` is required for Thunderbird itself to reconnect to the
+display when restarted after the backup. Hardcoding `DISPLAY=:0` without
+`XAUTHORITY` can work on some setups but fails silently under
+Wayland/XWayland, where the real X11 auth file lives at a randomized path
+(`/run/user/<uid>/xauth_XXXXXX`) instead of the default `~/.Xauthority` —
+Thunderbird gets spawned, immediately fails to connect to the display,
+and exits, while the script has no way to tell from a bare `Popen()` call.
+Reading the values live from `systemctl --user show-environment` avoids
+hardcoding a path that changes at every login.
 
 **7. Validate the first automatic run**
 Check the next day: notification received (desktop and/or e-mail
