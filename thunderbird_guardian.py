@@ -214,9 +214,22 @@ def restart_thunderbird() -> None:
             stderr=subprocess.DEVNULL,
             start_new_session=True
         )
-        log.info("✅ Thunderbird restarted")
     except OSError:
         log.warning("⚠️ Could not restart Thunderbird automatically")
+        return
+
+    # Popen() succeeding only means the process was spawned, not that it
+    # stayed up: a GUI app started without a valid display connection (e.g.
+    # missing XAUTHORITY when launched from cron) exits within milliseconds,
+    # which logging "restarted" right after Popen() would silently miss.
+    time.sleep(2)
+    if subprocess.run(["pgrep", "-x", THUNDERBIRD_PROCESS_PATTERN], capture_output=True).returncode == 0:
+        log.info("✅ Thunderbird restarted")
+    else:
+        log.warning(
+            "⚠️ Thunderbird was relaunched but exited immediately "
+            "(check DISPLAY/XAUTHORITY in the environment it was started from)"
+        )
 
 
 # =============================================================================
