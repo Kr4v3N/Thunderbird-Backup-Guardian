@@ -222,14 +222,20 @@ def restart_thunderbird() -> None:
     # stayed up: a GUI app started without a valid display connection (e.g.
     # missing XAUTHORITY when launched from cron) exits within milliseconds,
     # which logging "restarted" right after Popen() would silently miss.
-    time.sleep(2)
-    if subprocess.run(["pgrep", "-x", THUNDERBIRD_PROCESS_PATTERN], capture_output=True).returncode == 0:
-        log.info("✅ Thunderbird restarted")
-    else:
-        log.warning(
-            "⚠️ Thunderbird was relaunched but exited immediately "
-            "(check DISPLAY/XAUTHORITY in the environment it was started from)"
-        )
+    # A single check after a fixed 2s sleep produced false-negative warnings
+    # every day in production (confirmed 2026-08-19): the snap package's
+    # exec chain (wrapper -> snap-confine -> thunderbird-bin) can take
+    # longer than 2s to settle, especially right after the backup's own
+    # disk I/O, so poll for up to 10s instead of checking once.
+    for _ in range(10):
+        time.sleep(1)
+        if subprocess.run(["pgrep", "-x", THUNDERBIRD_PROCESS_PATTERN], capture_output=True).returncode == 0:
+            log.info("✅ Thunderbird restarted")
+            return
+    log.warning(
+        "⚠️ Thunderbird was relaunched but exited immediately "
+        "(check DISPLAY/XAUTHORITY in the environment it was started from)"
+    )
 
 
 # =============================================================================
