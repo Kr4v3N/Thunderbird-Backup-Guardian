@@ -161,11 +161,30 @@ def init_password() -> str:
 
 
 def get_password() -> str:
+    # Raises RuntimeError rather than sys.exit() on failure: run_backup()'s
+    # caller (main()) only catches Exception, not the BaseException-rooted
+    # SystemExit, so sys.exit() here would skip notify_desktop()/
+    # notify_email_failure() entirely on a production cron run (confirmed
+    # by code review 2026-09-22, alongside the fix below). --verify calls
+    # this outside that try/except and handles RuntimeError locally to
+    # keep its own clean exit behavior.
     password = keyring.get_password(Config.KEYRING_SERVICE, Config.KEYRING_USERNAME)
     if password is None:
-        log.error("❌ Password not initialized.")
-        log.error(f"   Run: python3 {sys.argv[0]} --init")
-        sys.exit(2)
+        raise RuntimeError(f"Password not initialized. Run: python3 {sys.argv[0]} --init")
+    if not password:
+        # keyring can return "" instead of None or raising when the
+        # SecretService backend can't actually unlock the collection in
+        # this context (e.g. no active/unlocked session at cron time):
+        # confirmed 2026-09-22, same env vars as an interactive run, valid
+        # password still in the keyring, yet this run got back "". Left
+        # unchecked, an empty password silently reaches restic and fails
+        # two layers down with a cryptic "empty password" error instead of
+        # pointing at the real cause.
+        raise RuntimeError(
+            "Keyring returned an empty password (not None). The SecretService "
+            "collection was likely locked/unreachable in this run's session, "
+            "not a missing password."
+        )
     return password
 
 
@@ -657,7 +676,11 @@ def main():
             if not repo.exists():
                 log.error(f"❌ Repository not found: {repo}")
                 sys.exit(1)
-            password = get_password()
+            try:
+                password = get_password()
+            except RuntimeError as e:
+                log.error(f"❌ {e}")
+                sys.exit(2)
             ok = check_repo(repo, password, deep=True)
             sys.exit(0 if ok else 4)
 
