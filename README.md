@@ -508,6 +508,13 @@ with a ~50% silent failure rate over 6 months, with no alerting), late
 disk-mount resilience, and a fully self-contained restore tested through
 real execution.
 
+**v22.1.** First tagged release. `get_password()` now treats an empty
+string from the system keyring as a real failure, not just `None`
+(confirmed 2026-09-22: the SecretService backend can hand back an empty
+secret instead of raising when it can't unlock the collection in a cron
+run's session), and raises instead of exiting directly so a cron-time
+failure still triggers the desktop/e-mail alert.
+
 ---
 
 *Born out of a personal need (and an unpleasant discovery — see*

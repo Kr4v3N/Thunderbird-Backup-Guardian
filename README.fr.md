@@ -516,6 +516,14 @@ d'échec (le script tournait avec ~50 % d'échecs silencieux sur 6 mois,
 faute d'alerte), la résilience au montage tardif du disque, et une
 restauration entièrement autonome et testée en conditions réelles.
 
+**v22.1.** Première release taguée. `get_password()` traite désormais une
+chaîne vide renvoyée par le trousseau système comme un vrai échec, pas
+seulement `None` (confirmé le 22/09/2026 : le backend SecretService peut
+renvoyer un secret vide au lieu de lever une erreur quand il ne peut pas
+déverrouiller la collection dans la session d'un run cron), et lève une
+exception plutôt que de quitter directement, pour qu'un échec en cron
+déclenche quand même l'alerte desktop/e-mail.
+
 ---
 
 *Né d'un besoin personnel (et d'une découverte peu agréable — voir*
