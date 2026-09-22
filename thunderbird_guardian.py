@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 ═══════════════════════════════════════════════════════════════════════════════
-THUNDERBIRD SECURE GUARDIAN v22.0 - RESTIC EDITION
+THUNDERBIRD SECURE GUARDIAN v22.1 - RESTIC EDITION
 ═══════════════════════════════════════════════════════════════════════════════
 
-VERSION: 22.0
+VERSION: 22.1
 
 Backs up the Thunderbird profile via restic: real AES-256 encryption,
 deduplication, native integrity checking, daily/weekly/monthly retention.
@@ -658,7 +658,7 @@ def check_system_deps() -> bool:
 
 def main():
     print("\n" + "═" * 70)
-    print("  THUNDERBIRD SECURE GUARDIAN v22.0 — Restic Edition")
+    print("  THUNDERBIRD SECURE GUARDIAN v22.1 — Restic Edition")
     print("═" * 70 + "\n")
 
     if len(sys.argv) > 1:
