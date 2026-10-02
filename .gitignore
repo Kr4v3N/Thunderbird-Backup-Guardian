@@ -8,6 +8,7 @@
 
 # Local IDE config (machine-specific paths)
 .idea/
+.directory
 
 # Logs (unmanaged, regenerated on every run, can grow large)
 *.log
