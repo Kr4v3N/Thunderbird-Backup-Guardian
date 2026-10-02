@@ -394,9 +394,19 @@ sudo apt install restic
 ```
 
 **`❌ Mot de passe non initialisé`**
+
+Premier cas, une installation neuve sans dépôt existant :
 ```bash
 .venv/bin/python3 thunderbird_guardian.py --init
 ```
+
+Second cas, les sauvegardes fonctionnaient et le dépôt existe déjà : l'entrée
+du trousseau a été perdue (trousseau neuf ou réinitialisé, dossier personnel
+restauré). **Ne lancez pas `--init` avec un nouveau mot de passe** : le dépôt
+existant est chiffré avec l'ancien et un nouveau ne peut pas l'ouvrir.
+Restaurez les anciens fichiers du trousseau depuis une copie de votre dossier
+personnel, ou lancez `--init` en saisissant exactement l'**ancien** mot de
+passe. Vérifiez ensuite avec `--verify`.
 
 **Le disque n'est jamais détecté**
 ```bash

@@ -388,9 +388,18 @@ sudo apt install restic
 ```
 
 **`❌ Password not initialized`**
+
+First case, a brand-new install with no repository yet:
 ```bash
 .venv/bin/python3 thunderbird_guardian.py --init
 ```
+
+Second case, backups used to work and the repository already exists: the
+keyring entry was lost (new or reset keyring, restored home directory). **Do
+not run `--init` with a new password**: the existing repository is encrypted
+with the old one and a new password cannot open it. Restore the old keyring
+files from a backup of your home directory, or run `--init` and enter exactly
+the **old** password. Then check with `--verify`.
 
 **The disk is never detected**
 ```bash
