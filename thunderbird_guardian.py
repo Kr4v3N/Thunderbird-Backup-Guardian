@@ -198,7 +198,7 @@ THUNDERBIRD_PROCESS_PATTERN = "thunderbird|thunderbird-bin"
 def close_thunderbird() -> None:
     """The real process name depends on the install method: the native
     binary is called `thunderbird`, but a snap package exec()s into a
-    separate `thunderbird-bin` — pkill/pgrep -x must cover both, otherwise
+    separate `thunderbird-bin`: pkill/pgrep -x must cover both, otherwise
     the shutdown check is a silent false positive."""
     log.info("Closing Thunderbird...")
     subprocess.run(["pkill", "-x", THUNDERBIRD_PROCESS_PATTERN], capture_output=True)
@@ -206,14 +206,14 @@ def close_thunderbird() -> None:
 
     if subprocess.run(["pgrep", "-x", THUNDERBIRD_PROCESS_PATTERN], capture_output=True).returncode == 0:
         raise RuntimeError(
-            "Thunderbird refuses to close — backup aborted to avoid "
+            "Thunderbird refuses to close: backup aborted to avoid "
             "reading a profile that's still being written to"
         )
     log.info("✅ Thunderbird closed")
 
     # .parentlock isn't cleaned up by a normal shutdown (confirmed by
     # restoring a real backup and having it trigger Thunderbird's "already
-    # running" false positive) — *.lock alone doesn't match it, since the
+    # running" false positive); *.lock alone doesn't match it, since the
     # glob requires a character before ".lock" and "parentlock" has none.
     for pattern in ("*.lock", ".parentlock", "lock"):
         for lock in Config.SOURCE_DIR.rglob(pattern):
@@ -319,7 +319,7 @@ def ensure_repo_initialized(repo: Path, password: str) -> None:
 
 def check_repo(repo: Path, password: str, deep: bool = False) -> bool:
     # A structural check alone doesn't catch silent corruption of data
-    # already written (bit rot) — sample 5% of the data blocks on every
+    # already written (bit rot): sample 5% of the data blocks on every
     # routine run, on top of the full --read-data of the manual --verify.
     args = ["check"] + (["--read-data"] if deep else ["--read-data-subset=5%"])
     log.info("🔍 Checking repository integrity" + (" (full, slow)" if deep else "") + "...")
@@ -333,7 +333,7 @@ def check_repo(repo: Path, password: str, deep: bool = False) -> bool:
 
 def do_backup(repo: Path, password: str) -> dict:
     """Backs up a RELATIVE path (cwd = parent directory) so that restic
-    never records the original absolute path — restoring must be able to
+    never records the original absolute path: restoring must be able to
     recreate the profile without depending on the username or machine the
     backup was taken on."""
     log.info(f"Backing up {Config.SOURCE_DIR}...")
@@ -539,7 +539,7 @@ def sync_docs_to_disk(dest_dir: Path) -> None:
 
 def notify_desktop(title: str, message: str, urgency: str = "normal") -> None:
     # Popup size is a Plasma theme setting (System Settings > Notifications),
-    # not something notify-send controls — icon + urgency + display duration
+    # not something notify-send controls: icon + urgency + display duration
     # are the only levers available from the script.
     icon = "dialog-error" if urgency == "critical" else "drive-harddisk"
     expire_ms = "0" if urgency == "critical" else "15000"
@@ -637,7 +637,7 @@ def run_backup() -> None:
     if not repo_healthy:
         notify_email_failure(
             "The backup succeeded, but the restic integrity check failed "
-            "before the backup ran — check the repository manually "
+            "before the backup ran: check the repository manually "
             "(`python3 thunderbird_guardian.py --verify`)."
         )
 
@@ -658,7 +658,7 @@ def check_system_deps() -> bool:
 
 def main():
     print("\n" + "═" * 70)
-    print("  THUNDERBIRD SECURE GUARDIAN v22.1 — Restic Edition")
+    print("  THUNDERBIRD SECURE GUARDIAN v22.1 - Restic Edition")
     print("═" * 70 + "\n")
 
     if len(sys.argv) > 1:
