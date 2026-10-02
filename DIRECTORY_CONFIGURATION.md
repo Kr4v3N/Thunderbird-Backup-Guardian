@@ -5,11 +5,11 @@
 `resolve_dest_dir()` in `thunderbird_guardian.py` follows a simple,
 deliberately unmagical logic:
 
-1. **`TB_BACKUP_DIR` environment variable**, if set — used as-is, no
+1. **`TB_BACKUP_DIR` environment variable**, if set, used as-is, no
    exceptions.
 2. **Fallback**: `~/thunderbird_backups`, if `TB_BACKUP_DIR` isn't set.
 
-The script does **not** try to guess an external disk's name — a disk
+The script does **not** try to guess an external disk's name: a disk
 name is specific to each install, there's nothing to generalize. If you
 back up to an external disk, set `TB_BACKUP_DIR` explicitly.
 
@@ -27,7 +27,7 @@ Look for this line in the logs:
 
 The automatic mount point for an external disk varies depending on the
 desktop environment (KDE usually mounts under `/run/media/`, others
-under `/media/`) — check yours:
+under `/media/`), check yours:
 ```bash
 ls /run/media/$USER/ 2>/dev/null
 ls /media/$USER/ 2>/dev/null
@@ -53,8 +53,8 @@ crontab -e
 TB_BACKUP_DIR="/media/$USER/<DISK_NAME>/Backup Thunderbird"
 40 18 * * * export XDG_RUNTIME_DIR=/run/user/$(id -u) && export $(systemctl --user show-environment | grep -E '^(DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS)=') && cd ~/PycharmProjects/Backup-Thunderbird && .venv/bin/python3 thunderbird_guardian.py
 ```
-A variable set at the top of the crontab applies to every line below it
-— necessary here since cron doesn't load `~/.bashrc`.
+A variable set at the top of the crontab applies to every line below it. This is
+necessary here since cron doesn't load `~/.bashrc`.
 
 ## 🐛 TROUBLESHOOTING
 
@@ -75,7 +75,7 @@ increase `TB_MOUNT_RETRY_DELAY`/`TB_MOUNT_RETRY_ATTEMPTS`.
 
 ### `keyring.errors.NoKeyringError` under cron
 
-Not a directory/mount issue — the crontab line above is missing
+Not a directory/mount issue: the crontab line above is missing
 `XDG_RUNTIME_DIR` (or exports it after, not before, the
 `systemctl --user show-environment` call). See the full explanation in
 [README.md](README.md#deploying-to-production) / [README.fr.md](README.fr.md#déploiement-en-production), step 6.

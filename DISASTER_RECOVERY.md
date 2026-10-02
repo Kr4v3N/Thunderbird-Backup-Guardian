@@ -1,4 +1,4 @@
-# 🆘 RESTORE GUIDE — ALL SCENARIOS
+# 🆘 RESTORE GUIDE: ALL SCENARIOS
 
 *[🇫🇷 Lire en français](DISASTER_RECOVERY.fr.md)*
 
@@ -8,14 +8,14 @@ PC, reinstalled OS, recovery disk on an unfamiliar machine).
 
 **Safety principle in every case**: a restore always writes to a separate
 folder (`~/<profile>-restored-<date>`, where `<profile>` is your
-Thunderbird profile folder's name — `.thunderbird` by default, unless you
+Thunderbird profile folder's name, `.thunderbird` by default, unless you
 customized `TB_SOURCE_DIR`), never directly onto `~/<profile>`. Nothing is
 overwritten until you've checked the result and done the switch-over
 yourself.
 
 ---
 
-## Scenario 1 — Mistake / accidental deletion (common case)
+## Scenario 1: Mistake / accidental deletion (common case)
 
 The current PC works fine, the backup disk is plugged in, you just want
 to roll back (deleted an e-mail by mistake, a corrupted folder...).
@@ -29,7 +29,7 @@ The script:
 1. Asks for the restic password (system keyring, Proton Pass, or memory)
 2. Lists the available backups (`restic snapshots`)
 3. Lets you pick which one to restore (empty = most recent)
-4. Restores to `~/<profile>-restored-<date>` — never overwriting the active profile
+4. Restores to `~/<profile>-restored-<date>`, never overwriting the active profile
 
 To recover just one specific item (a folder, a file) without restoring
 everything:
@@ -50,13 +50,13 @@ restic -r "/run/media/$USER/<DISK_NAME>/Backup Thunderbird/restic-repo" mount /t
 
 ---
 
-## Scenario 2 — Total disaster: dead PC, reinstalled OS
+## Scenario 2: Total disaster: dead PC, reinstalled OS
 
-### Step 0 — Before you start: the password
+### Step 0: Before you start: the password
 
-Without the restic repository password, **no recovery is possible** —
+Without the restic repository password, **no recovery is possible**:
 this is real AES-256 encryption, no backdoor. Look for it in this order:
-1. **Proton Pass** (mobile or web app, if you set it up) — survives the
+1. **Proton Pass** (mobile or web app, if you set it up): it survives the
    PC dying since it's synced to Proton's servers
 2. A paper backup, if you made one
 3. Your memory
@@ -64,12 +64,12 @@ this is real AES-256 encryption, no backdoor. Look for it in this order:
 If none of the three work, stop here: neither I nor anyone else can
 decrypt the repository without this password.
 
-### Step 1 — Reinstall the required packages
+### Step 1: Reinstall the required packages
 
-Only `restic` is a real prerequisite to restore the data — the restore
+Only `restic` is a real prerequisite to restore the data: the restore
 itself (locating the disk, extracting files) never touches Thunderbird.
 **Thunderbird is only needed at the very last step**, to reopen the
-profile once restored — you can install it before, after, or while the
+profile once restored; you can install it before, after, or while the
 restore is running, install order has no technical importance.
 
 If you have internet access on the new install:
@@ -79,11 +79,11 @@ sudo apt install restic thunderbird
 ```
 
 If you **don't** have internet access (or `apt install restic` fails),
-the official restic binary is already on the backup disk — see Scenario 3.
+the official restic binary is already on the backup disk (see Scenario 3).
 Thunderbird itself can wait until you have internet again if needed,
 since it's only required at the end.
 
-### Step 2 — Plug in the disk and locate it
+### Step 2: Plug in the disk and locate it
 
 The automatic mount point varies depending on the Ubuntu version/desktop
 environment (KDE usually mounts under `/run/media/`, others under
@@ -94,7 +94,7 @@ ls /media/$USER/ 2>/dev/null
 ```
 Look for the `Backup Thunderbird` folder on the `<DISK_NAME>` disk.
 
-### Step 3 — Restore
+### Step 3: Restore
 
 ```bash
 cd "/path/found/in/step/2/Backup Thunderbird"
@@ -103,16 +103,16 @@ bash RESTORE_EMERGENCY.sh
 
 The script detects on its own whether `restic` is missing from the
 system and automatically falls back to the bundled binary
-(`restic-bin/restic` next to the script) — no extra action needed on
+(`restic-bin/restic` next to the script), no extra action needed on
 your part.
 
-### Step 4 — Check before switching over
+### Step 4: Check before switching over
 
 The files are in `~/<profile>-restored-<date>`. Check that it looks
 complete (size consistent with your usual backups, mail folders present)
 before continuing.
 
-### Step 5 — Activate the restored profile
+### Step 5: Activate the restored profile
 
 ```bash
 pkill -x thunderbird 2>/dev/null || true
@@ -120,17 +120,17 @@ mv ~/<profile>-restored-<date>/<profile> ~/<profile>
 thunderbird &
 ```
 
-The new install's Linux username can be different from the original one
-— no problem, the whole process relies on `$HOME` dynamically, and the
+The new install's Linux username can be different from the original one:
+no problem, the whole process relies on `$HOME` dynamically, and the
 backup itself contains no absolute path or username (see
 `thunderbird_guardian.py::do_backup`).
 
 ---
 
-## Scenario 3 — `restic` not found AND the bundled binary is missing/corrupted
+## Scenario 3: `restic` not found AND the bundled binary is missing/corrupted
 
 Download the official static binary (no system dependency, runs on any
-x86-64 Linux distribution) **with checksum verification before use** —
+x86-64 Linux distribution) **with checksum verification before use**:
 never run a downloaded binary without checking that it exactly matches
 what restic actually published:
 
@@ -146,7 +146,7 @@ EXPECTED=$(grep "linux_amd64.bz2" SHA256SUMS | awk '{print $1}')
 ACTUAL=$(sha256sum restic.bz2 | awk '{print $1}')
 
 if [ "$EXPECTED" != "$ACTUAL" ]; then
-    echo "❌ Invalid checksum — file is corrupted or compromised, DO NOT USE"
+    echo "❌ Invalid checksum - file is corrupted or compromised, DO NOT USE"
     exit 1
 fi
 echo "✅ Checksum verified: $ACTUAL"
@@ -162,7 +162,7 @@ that might be missing on a fresh install).
 
 ---
 
-## Scenario 4 — The backup disk shows signs of failure
+## Scenario 4: The backup disk shows signs of failure
 
 If the disk has read errors (unusual slowdowns, `Input/output error`):
 **don't run any write operation on it** (no backup, no `restic
@@ -177,7 +177,7 @@ Then work from the copy, never on the original failing disk.
 
 ---
 
-## Scenario 5 — Checking the repository's health without restoring
+## Scenario 5: Checking the repository's health without restoring
 
 ```bash
 export RESTIC_PASSWORD='your_password'
@@ -189,7 +189,7 @@ venv is available on the machine.
 
 ---
 
-## Scenario 6 — Thunderbird says "already running" on the restored profile
+## Scenario 6: Thunderbird says "already running" on the restored profile
 
 ```
 Thunderbird is already running, but is not responding. To use Thunderbird,
@@ -198,7 +198,7 @@ device, or use a different profile.
 ```
 
 Backups taken before this got fixed can carry a stale `.parentlock` file
-(Thunderbird's own lock, distinct from the `lock` file — `*.lock` glob
+(Thunderbird's own lock, distinct from the `lock` file: `*.lock` glob
 patterns don't match it) copied straight from the source profile. Remove
 it from the **restored copy only**, never from your live profile:
 ```bash
@@ -210,7 +210,7 @@ Then launch Thunderbird on that profile again.
 
 ## What CANNOT happen to this backup
 
-- **Forgotten password**: this isn't a bug to fix — it's the intended
+- **Forgotten password**: this isn't a bug to fix; it's the intended
   behavior of real AES-256 encryption. The only protection is keeping a
   durable copy of the password (see Scenario 2, step 0).
 - **Change of Linux username or machine**: no impact, everything relies
