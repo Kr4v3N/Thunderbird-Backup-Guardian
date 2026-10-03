@@ -408,6 +408,16 @@ Restaurez les anciens fichiers du trousseau depuis une copie de votre dossier
 personnel, ou lancez `--init` en saisissant exactement l'**ancien** mot de
 passe. Vérifiez ensuite avec `--verify`.
 
+**`❌ The restic repository exists (...) but could not be opened`**
+Le dépôt est bien là, mais restic refuse le mot de passe enregistré dans le
+trousseau (la raison donnée par restic figure dans le message, en général
+`wrong password or no key found`). Le plus souvent, l'entrée du trousseau a
+été remplacée par un autre mot de passe, par exemple par un `--init` avec un
+nouveau. Le script ne tente pas de créer un nouveau dépôt dans ce cas.
+Relancez `--init`, répondez `yes` pour remplacer le mot de passe enregistré,
+saisissez exactement l'**ancien** mot de passe, puis vérifiez avec
+`--verify`.
+
 **Le disque n'est jamais détecté**
 ```bash
 export TB_LOG_LEVEL=DEBUG

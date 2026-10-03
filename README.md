@@ -401,6 +401,15 @@ with the old one and a new password cannot open it. Restore the old keyring
 files from a backup of your home directory, or run `--init` and enter exactly
 the **old** password. Then check with `--verify`.
 
+**`❌ The restic repository exists (...) but could not be opened`**
+The repository is there but restic refused the password stored in the
+keyring (restic's own reason is quoted in the message, typically `wrong
+password or no key found`). Most often the keyring entry was replaced with a
+different password, for instance by an `--init` with a new one. The script
+does not try to create a new repository in this case. Run `--init` again,
+answer `yes` to replace the stored password, enter exactly the **old**
+password, then check with `--verify`.
+
 **The disk is never detected**
 ```bash
 export TB_LOG_LEVEL=DEBUG

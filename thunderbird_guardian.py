@@ -312,6 +312,19 @@ def ensure_repo_initialized(repo: Path, password: str) -> None:
     result = run_restic(repo, password, ["snapshots", "--json"], check=False)
     if result.returncode == 0:
         return
+    # A failed `snapshots` on a repository that already exists is not a
+    # reason to initialize one: `restic init` would refuse anyway, and its
+    # "init failed" error hides the real cause, usually a keyring password
+    # that isn't the one this repository was created with (confirmed by a
+    # throwaway-repository test, 2026-10-03). Say that instead.
+    if (repo / "config").exists():
+        raise RuntimeError(
+            f"The restic repository exists ({repo}) but could not be opened "
+            f"(restic: {result.stderr.strip()}). Most likely cause: the password in the "
+            "keyring is not the one this repository was created with. Do NOT "
+            "run --init with a new password: enter the original one (see "
+            "Troubleshooting in README.md)."
+        )
     log.info("Initializing the restic repository...")
     run_restic(repo, password, ["init"])
     log.info("✅ restic repository initialized")
