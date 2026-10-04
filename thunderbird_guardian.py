@@ -22,6 +22,10 @@ USAGE:
 
 import os
 import sys
+import errno
+import html
+import locale
+import stat
 import subprocess
 import time
 import logging
@@ -105,16 +109,41 @@ def setup_logging() -> logging.Logger:
 log = setup_logging()
 
 
-def attach_file_logging(dest_dir: Path) -> None:
-    """Adds file rotation once the destination is confirmed reachable."""
+class _NoFollowRotatingFileHandler(RotatingFileHandler):
+    """Refuses to open the log through a symlink planted at its name on the
+    backup disk (which would append to any file the user can write), and
+    refuses anything but a regular file: a FIFO planted there would block
+    the open forever and hang the run before any failure notification."""
+
+    def _open(self):
+        fd = os.open(
+            self.baseFilename,
+            os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW | os.O_NONBLOCK,
+            0o666,
+        )
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise OSError(f"Not a regular file: {self.baseFilename}")
+            os.set_blocking(fd, True)
+            return open(fd, self.mode, encoding=self.encoding, errors=self.errors)
+        except BaseException:
+            os.close(fd)
+            raise
+
+
+def attach_file_logging(dest_fd: int) -> None:
+    """Adds file rotation once the destination is confirmed reachable.
+
+    The log path goes through /proc/self/fd so that the open and every
+    rotation rename land in the directory open_backup_dir() checked, even if
+    the path to it is swapped afterwards."""
     formatter = logging.Formatter(
         '%(asctime)s | %(levelname)-8s | %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     try:
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        handler = RotatingFileHandler(
-            dest_dir / "guardian_automated.log",
+        handler = _NoFollowRotatingFileHandler(
+            f"/proc/self/fd/{dest_fd}/guardian_automated.log",
             maxBytes=10 * 1024 * 1024,
             backupCount=5,
             encoding='utf-8'
@@ -272,6 +301,129 @@ def wait_for_disk(dest_dir: Path) -> bool:
         if attempt < Config.MOUNT_RETRY_ATTEMPTS:
             time.sleep(Config.MOUNT_RETRY_DELAY)
     return False
+
+
+MAX_SYMLINK_HOPS = 40
+
+
+def trusted_devices() -> set:
+    """Filesystems whose symlinks the backup may follow: / and the home
+    directory's. Anyone who can write to the backup disk (physical access,
+    shared mount) can plant a symlink there, but not on these."""
+    return {os.stat("/").st_dev, os.stat(Path.home()).st_dev}
+
+
+def open_backup_dir(path: Path, create: bool = True) -> int:
+    """Opens the backup destination one component at a time and returns an
+    O_PATH directory fd for it, creating missing components if asked.
+
+    A symlink along the path is followed only when it is stored on a
+    trusted filesystem (see trusted_devices()), so a link the user made
+    (e.g. ~/thunderbird_backups -> /media/$USER/<disk>/...) still works,
+    while one planted on the backup disk (e.g. the destination folder
+    replaced by a link to a directory in $HOME) is refused instead of
+    redirecting every write of the run off the disk. Each component is
+    opened with O_NOFOLLOW, so a swap between the check and the open fails
+    rather than being followed. Callers then write relative to the fd."""
+    trusted = trusted_devices()
+    parts = list(Path(os.path.abspath(path)).parts[1:])
+    fd = os.open("/", os.O_PATH | os.O_DIRECTORY)
+    hops = 0
+    try:
+        while parts:
+            name = parts.pop(0)
+            if name in ("", "."):
+                continue
+            try:
+                st = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            except FileNotFoundError:
+                if not create:
+                    raise
+                try:
+                    os.mkdir(name, dir_fd=fd)
+                except FileExistsError:
+                    pass
+                st = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            if stat.S_ISLNK(st.st_mode):
+                if os.fstat(fd).st_dev not in trusted:
+                    raise RuntimeError(
+                        f"Refusing to follow the symbolic link '{name}' in the backup "
+                        f"destination path ({path}): it is stored on the backup disk "
+                        "(or another filesystem than / and your home), where anyone who "
+                        "can write to the disk could plant it to redirect the backup's "
+                        "writes. Point TB_BACKUP_DIR at the real directory instead."
+                    )
+                hops += 1
+                if hops > MAX_SYMLINK_HOPS:
+                    raise RuntimeError(f"Too many symbolic links in the backup destination path: {path}")
+                target = os.readlink(name, dir_fd=fd)
+                target_parts = list(Path(target).parts)
+                if target.startswith("/"):
+                    root_fd = os.open("/", os.O_PATH | os.O_DIRECTORY)
+                    os.close(fd)
+                    fd = root_fd
+                    target_parts = target_parts[1:]
+                parts = target_parts + parts
+                continue
+            child_fd = os.open(name, os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = child_fd
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def check_repo_not_linked(dest_fd: int) -> None:
+    """restic follows symlinks in its repository path: a `restic-repo`
+    planted as a link (or holding linked subdirectories, which restic
+    creates new files in) would send the whole encrypted backup to a
+    directory chosen by whoever can write to the disk. Refuse those before
+    any restic command runs. restic itself names every file inside after
+    its content hash, so only directory-level links matter here."""
+    repo_name = "restic-repo"
+    try:
+        st = os.stat(repo_name, dir_fd=dest_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    if stat.S_ISLNK(st.st_mode):
+        raise RuntimeError(
+            f"Refusing to use '{repo_name}': it is a symbolic link, not the "
+            "repository directory itself."
+        )
+    if not stat.S_ISDIR(st.st_mode):
+        return
+
+    def linked_entries(dir_fd: int) -> list:
+        with os.scandir(dir_fd) as it:
+            return [e.name for e in it if e.is_symlink()]
+
+    repo_fd = os.open(repo_name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dest_fd)
+    try:
+        linked = linked_entries(repo_fd)
+        try:
+            data_fd = os.open("data", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=repo_fd)
+        except (FileNotFoundError, NotADirectoryError):
+            data_fd = None
+        except OSError as e:
+            if e.errno != errno.ELOOP:
+                raise
+            data_fd = None  # already reported as a link by linked_entries()
+        if data_fd is not None:
+            try:
+                linked += [f"data/{n}" for n in linked_entries(data_fd)]
+            finally:
+                os.close(data_fd)
+    finally:
+        os.close(repo_fd)
+    if linked:
+        # The names are chosen by whoever planted the links: kept out of
+        # the message, which ends up in the desktop and e-mail alerts.
+        raise RuntimeError(
+            f"Refusing to use '{repo_name}': it contains {len(linked)} symbolic "
+            "link(s) that would send restic's writes outside the backup disk. "
+            f"List them with: find '{repo_name}' -maxdepth 2 -type l"
+        )
 
 
 def check_disk_space(dest_dir: Path) -> None:
@@ -511,7 +663,77 @@ echo "  thunderbird &"
 """
 
 
-def write_restore_script(dest_dir: Path, repo: Path) -> None:
+def _copy_xattrs(source: Path, fd: int) -> None:
+    """Same best-effort extended-attribute copy as shutil.copy2."""
+    ignored = (errno.EPERM, errno.ENOTSUP, errno.ENODATA, errno.EINVAL, errno.EACCES)
+    try:
+        names = os.listxattr(source)
+    except OSError as e:
+        if e.errno not in (errno.ENOTSUP, errno.ENODATA, errno.EINVAL):
+            raise
+        return
+    for xattr_name in names:
+        try:
+            os.setxattr(fd, xattr_name, os.getxattr(source, xattr_name))
+        except OSError as e:
+            if e.errno not in ignored:
+                raise
+
+
+def replace_file_in_dir(
+    dir_fd: int, name: str, data: bytes, mode: int, copy_meta_from: Path = None
+) -> None:
+    """Replaces <dir>/<name> with a new regular file, never following a
+    symlink planted at that name on the backup disk: the content goes to a
+    temp file created with O_EXCL|O_NOFOLLOW, its mode (and, for copied
+    docs, timestamps and extended attributes, as shutil.copy2 would) is set
+    on the open fd, then it is renamed over <name>, which replaces a link
+    instead of writing through it.
+
+    A regular file the user can't write still fails the run with
+    PermissionError, as the former write_text()/copy2() did, instead of
+    being silently replaced."""
+    try:
+        st = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        st = None
+    if st is not None and stat.S_ISREG(st.st_mode) and not os.access(
+        name, os.W_OK, dir_fd=dir_fd, follow_symlinks=False
+    ):
+        raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), name)
+
+    # Fixed temp name: a run killed mid-write leaves at most this one file,
+    # cleared by the next run (unlink removes a link without following it).
+    tmp_name = f".{name}.tmp"
+    try:
+        os.unlink(tmp_name, dir_fd=dir_fd)
+    except FileNotFoundError:
+        pass
+    fd = os.open(
+        tmp_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=dir_fd
+    )
+    try:
+        try:
+            view = memoryview(data)
+            while view:
+                view = view[os.write(fd, view):]
+            if copy_meta_from is not None:
+                src_st = copy_meta_from.stat()
+                os.utime(fd, ns=(src_st.st_atime_ns, src_st.st_mtime_ns))
+                _copy_xattrs(copy_meta_from, fd)
+            os.fchmod(fd, mode)
+        finally:
+            os.close(fd)
+        os.replace(tmp_name, name, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+    except BaseException:
+        try:
+            os.unlink(tmp_name, dir_fd=dir_fd)
+        except OSError:
+            pass
+        raise
+
+
+def write_restore_script(dest_fd: int, repo: Path) -> None:
     """do_backup() backs up a RELATIVE path (cwd=parent) precisely so that
     restoring lands directly under $TARGET/<name>, never depending on an
     absolute path or a username. The search-based fallback stays as a
@@ -522,18 +744,23 @@ def write_restore_script(dest_dir: Path, repo: Path) -> None:
     in the language you actually think in during a real emergency)."""
     source_basename = Config.SOURCE_DIR.name
 
-    en_path = dest_dir / "RESTORE_EMERGENCY.sh"
-    en_path.write_text(_restore_script_en(repo.name, source_basename))
-    en_path.chmod(0o700)
+    # Same bytes as the former Path.write_text() (locale encoding, no
+    # newline translation on Linux).
+    encoding = locale.getpreferredencoding(False)
+    en_name = "RESTORE_EMERGENCY.sh"
+    replace_file_in_dir(
+        dest_fd, en_name, _restore_script_en(repo.name, source_basename).encode(encoding), 0o700
+    )
 
-    fr_path = dest_dir / "RESTORE_EMERGENCY.fr.sh"
-    fr_path.write_text(_restore_script_fr(repo.name, source_basename))
-    fr_path.chmod(0o700)
+    fr_name = "RESTORE_EMERGENCY.fr.sh"
+    replace_file_in_dir(
+        dest_fd, fr_name, _restore_script_fr(repo.name, source_basename).encode(encoding), 0o700
+    )
 
-    log.info(f"✅ Restore scripts up to date: {en_path.name}, {fr_path.name}")
+    log.info(f"✅ Restore scripts up to date: {en_name}, {fr_name}")
 
 
-def sync_docs_to_disk(dest_dir: Path) -> None:
+def sync_docs_to_disk(dest_fd: int) -> None:
     """Copies the restore docs onto the disk itself, both languages: in a
     crash, they must be readable without depending on GitHub or this PC."""
     for name in (
@@ -542,7 +769,10 @@ def sync_docs_to_disk(dest_dir: Path) -> None:
     ):
         source = BASE_DIR / name
         if source.exists():
-            shutil.copy2(source, dest_dir / name)
+            replace_file_in_dir(
+                dest_fd, name, source.read_bytes(), stat.S_IMODE(source.stat().st_mode),
+                copy_meta_from=source,
+            )
     log.info("✅ Restore documentation synced to disk (EN + FR)")
 
 
@@ -581,7 +811,7 @@ def notify_email_failure(error_message: str) -> None:
             "html": (
                 f"<p>The Thunderbird backup on "
                 f"{datetime.now().strftime('%Y-%m-%d %H:%M')} failed:</p>"
-                f"<pre>{error_message}</pre>"
+                f"<pre>{html.escape(error_message)}</pre>"
             ),
         })
         log.info("✅ Failure alert e-mail sent")
@@ -609,13 +839,19 @@ def run_backup() -> None:
             f"attempts: {dest_dir.parent}"
         )
 
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    attach_file_logging(dest_dir)
+    # Everything the run writes on the disk goes through this fd (log,
+    # restore scripts, docs) or through the real path it resolves to
+    # (restic), never through a symlink planted on the disk. Kept open for
+    # the whole process: the log handler writes through it.
+    dest_fd = open_backup_dir(dest_dir)
+    real_dest = Path(os.readlink(f"/proc/self/fd/{dest_fd}"))
+    attach_file_logging(dest_fd)
     log.info(f"✅ Destination: {dest_dir}")
 
-    check_disk_space(dest_dir)
+    check_disk_space(real_dest)
 
-    repo = dest_dir / "restic-repo"
+    check_repo_not_linked(dest_fd)
+    repo = real_dest / "restic-repo"
     password = get_password()
 
     ensure_repo_initialized(repo, password)
@@ -632,8 +868,8 @@ def run_backup() -> None:
     else:
         log.warning("⚠️ Retention skipped: the repository failed the integrity check")
 
-    write_restore_script(dest_dir, repo)
-    sync_docs_to_disk(dest_dir)
+    write_restore_script(dest_fd, repo)
+    sync_docs_to_disk(dest_fd)
 
     elapsed = time.time() - start
     log.info("═" * 70)

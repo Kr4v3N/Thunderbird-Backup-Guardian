@@ -282,6 +282,17 @@ restic -r "/chemin/vers/Backup Thunderbird/restic-repo" snapshots
   chemin relatif (`cwd` sur le dossier parent), donc restic n'enregistre
   jamais de chemin absolu ni de nom d'utilisateur, ni dans le dépôt, ni
   dans `RESTORE_EMERGENCY.sh` généré. Vérifié en exécution réelle.
+- **Aucun lien symbolique suivi sur le disque de sauvegarde** : toute
+  personne pouvant écrire sur le disque (accès physique, montage partagé)
+  pourrait sinon y placer un lien symbolique et faire écraser vos propres
+  fichiers par le run suivant. Le script ne suit un lien du chemin de
+  destination que s'il est stocké sur `/` ou sur le système de fichiers de
+  votre home (`~/thunderbird_backups` pointant vers le disque continue donc
+  de fonctionner), écrit le log, les scripts de restauration et les docs
+  sans jamais suivre un lien placé à leur nom, et refuse un `restic-repo`
+  qui est un lien ou contient des dossiers liés. Un dossier de destination
+  ou un dépôt refusé fait échouer le run avec les alertes habituelles ; un
+  lien placé au nom du log prive seulement ce run de son fichier de log.
 - **Binaire restic embarqué vérifié** : le binaire statique de secours est
   téléchargé depuis les releases officielles GitHub et comparé à son
   SHA256 publié avant tout usage.
@@ -417,6 +428,15 @@ nouveau. Le script ne tente pas de créer un nouveau dépôt dans ce cas.
 Relancez `--init`, répondez `yes` pour remplacer le mot de passe enregistré,
 saisissez exactement l'**ancien** mot de passe, puis vérifiez avec
 `--verify`.
+
+**`❌ Refusing to follow the symbolic link ...` / `❌ Refusing to use 'restic-repo' ...`**
+Un lien symbolique se trouve sur le disque de sauvegarde, dans le chemin de
+destination ou dans `restic-repo`. Si vous ne l'avez pas créé, quelqu'un
+d'autre ayant accès en écriture au disque l'a fait : laissez-le en place et
+regardez vers où il pointe avant toute autre action. S'il est de vous (par
+exemple un lien sur le disque lui-même utilisé comme `TB_BACKUP_DIR`),
+indiquez plutôt le vrai dossier dans `TB_BACKUP_DIR`. Les liens stockés sur
+`/` ou dans votre home restent suivis.
 
 **Le disque n'est jamais détecté**
 ```bash

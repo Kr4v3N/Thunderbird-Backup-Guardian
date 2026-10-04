@@ -277,6 +277,16 @@ restic -r "/path/to/Backup Thunderbird/restic-repo" snapshots
   set to the parent directory), so restic never records an absolute path
   or a username, neither in the repository nor in the generated
   `RESTORE_EMERGENCY.sh`. Verified through real execution.
+- **No symlink followed on the backup disk**: anyone who can write to the
+  disk (physical access, shared mount) could otherwise plant a symbolic
+  link there and make the next run overwrite your own files. The script
+  only follows a link in the destination path if it is stored on `/` or
+  on your home's filesystem (so `~/thunderbird_backups` pointing to the
+  disk keeps working), writes the log, restore scripts and docs without
+  ever following a link planted at their names, and refuses a
+  `restic-repo` that is a link or holds linked folders. A refused
+  destination or repository fails the run with the usual alerts; a link
+  planted at the log's name only costs that run its log file.
 - **Verified bundled restic binary**: the static fallback binary is
   downloaded from the official GitHub releases and checked against its
   published SHA256 before any use.
@@ -409,6 +419,14 @@ different password, for instance by an `--init` with a new one. The script
 does not try to create a new repository in this case. Run `--init` again,
 answer `yes` to replace the stored password, enter exactly the **old**
 password, then check with `--verify`.
+
+**`❌ Refusing to follow the symbolic link ...` / `❌ Refusing to use 'restic-repo' ...`**
+A symbolic link sits on the backup disk, in the destination path or in
+`restic-repo`. If you didn't create it, someone else who can write to the
+disk did: leave it in place and inspect where it points before doing
+anything else. If it is your own (for example a link on the disk itself
+used as `TB_BACKUP_DIR`), set `TB_BACKUP_DIR` to the real directory
+instead. Links stored on `/` or in your home are still followed.
 
 **The disk is never detected**
 ```bash

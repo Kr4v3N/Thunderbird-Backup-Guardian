@@ -13,6 +13,16 @@ The script does **not** try to guess an external disk's name: a disk
 name is specific to each install, there's nothing to generalize. If you
 back up to an external disk, set `TB_BACKUP_DIR` explicitly.
 
+**Symbolic links in the path.** The destination is opened one directory at
+a time, and a symbolic link along the way is followed only if it is
+stored on `/` or on your home's filesystem. A link you made in your home
+(for example `~/thunderbird_backups -> /run/media/$USER/<DISK>/Backup
+Thunderbird`) works as before. A link stored on the backup disk itself,
+or on any other mounted filesystem, makes the run fail with `Refusing to
+follow the symbolic link ...`: anyone who can write to the disk could
+plant one to redirect the backup's writes into your home. Use the real
+directory in `TB_BACKUP_DIR` instead.
+
 ## Checking where the script currently backs up to
 
 ```bash
