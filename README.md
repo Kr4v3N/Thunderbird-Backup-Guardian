@@ -532,7 +532,7 @@ Thunderbird show a false "already running" dialog on the restored copy
 
 ## History
 
-**v22 (current): migration to restic.** v21 used
+**v22: migration to restic.** v21 used
 `zipfile.ZipFile.setpassword()` to "encrypt" archives, a known
 limitation of the Python standard library that **silently ignores the
 password on write**. Every backup produced by v21 was therefore stored
@@ -544,7 +544,7 @@ with a ~50% silent failure rate over 6 months, with no alerting), late
 disk-mount resilience, and a fully self-contained restore tested through
 real execution.
 
-**v22.1.** First tagged release. `get_password()` now treats an empty
+**v22.1 (current).** First tagged release. `get_password()` now treats an empty
 string from the system keyring as a real failure, not just `None`
 (confirmed 2026-09-22: the SecretService backend can hand back an empty
 secret instead of raising when it can't unlock the collection in a cron

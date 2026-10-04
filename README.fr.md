@@ -544,7 +544,7 @@ déclencher un faux "déjà en cours d'exécution" sur la copie restaurée
 
 ## Historique
 
-**v22 (actuelle) : migration vers restic.** La v21 utilisait
+**v22 : migration vers restic.** La v21 utilisait
 `zipfile.ZipFile.setpassword()` pour "chiffrer" les archives, une
 limitation connue du module standard Python qui **ignore silencieusement
 le mot de passe à l'écriture**. Toutes les sauvegardes produites par la
@@ -556,7 +556,7 @@ d'échec (le script tournait avec ~50 % d'échecs silencieux sur 6 mois,
 faute d'alerte), la résilience au montage tardif du disque, et une
 restauration entièrement autonome et testée en conditions réelles.
 
-**v22.1.** Première release taguée. `get_password()` traite désormais une
+**v22.1 (actuelle).** Première release taguée. `get_password()` traite désormais une
 chaîne vide renvoyée par le trousseau système comme un vrai échec, pas
 seulement `None` (confirmé le 22/09/2026 : le backend SecretService peut
 renvoyer un secret vide au lieu de lever une erreur quand il ne peut pas
