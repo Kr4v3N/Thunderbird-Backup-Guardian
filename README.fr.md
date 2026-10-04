@@ -290,9 +290,15 @@ restic -r "/chemin/vers/Backup Thunderbird/restic-repo" snapshots
   votre home (`~/thunderbird_backups` pointant vers le disque continue donc
   de fonctionner), écrit le log, les scripts de restauration et les docs
   sans jamais suivre un lien placé à leur nom, et refuse un `restic-repo`
-  qui est un lien ou contient des dossiers liés. Un dossier de destination
-  ou un dépôt refusé fait échouer le run avec les alertes habituelles ; un
-  lien placé au nom du log prive seulement ce run de son fichier de log.
+  qui est un lien ou contient des dossiers liés. Les dossiers de
+  destination et de dépôt sont ouverts une fois puis utilisés par cette
+  poignée ouverte (restic reçoit le dossier lui-même, pas un chemin), donc
+  les remplacer par un lien pendant un run ne le redirige pas non plus ;
+  `--verify` passe par les mêmes contrôles. Un dossier de destination ou un
+  dépôt refusé fait échouer le run avec les alertes habituelles ; un lien
+  placé au nom du log prive seulement ce run de son fichier de log. Seul
+  cas non couvert : un lien glissé *à l'intérieur* des dossiers `data/` du
+  dépôt pendant un run (restic nomme ces fichiers d'après leur empreinte).
 - **Binaire restic embarqué vérifié** : le binaire statique de secours est
   téléchargé depuis les releases officielles GitHub et comparé à son
   SHA256 publié avant tout usage.
@@ -437,6 +443,15 @@ regardez vers où il pointe avant toute autre action. S'il est de vous (par
 exemple un lien sur le disque lui-même utilisé comme `TB_BACKUP_DIR`),
 indiquez plutôt le vrai dossier dans `TB_BACKUP_DIR`. Les liens stockés sur
 `/` ou dans votre home restent suivis.
+
+**`❌ The directory 'restic-repo' is not empty but holds no restic 'config' file`**
+Le dossier du dépôt contient des données (`keys/`, `data/`...) mais son
+fichier `config` manque : copie partielle ou dépôt à moitié restauré. Le
+script refuse de démarrer un second dépôt, sans rapport, à côté. Remettez le
+fichier `config` manquant depuis l'endroit d'où le dépôt a été copié ou
+restauré, puis relancez. Seulement si ce dépôt est vraiment perdu, mettez le
+dossier de côté pour en démarrer un nouveau (un nouveau dépôt ne peut pas
+lire les anciennes sauvegardes).
 
 **Le disque n'est jamais détecté**
 ```bash

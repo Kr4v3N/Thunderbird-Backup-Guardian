@@ -284,9 +284,15 @@ restic -r "/path/to/Backup Thunderbird/restic-repo" snapshots
   on your home's filesystem (so `~/thunderbird_backups` pointing to the
   disk keeps working), writes the log, restore scripts and docs without
   ever following a link planted at their names, and refuses a
-  `restic-repo` that is a link or holds linked folders. A refused
-  destination or repository fails the run with the usual alerts; a link
-  planted at the log's name only costs that run its log file.
+  `restic-repo` that is a link or holds linked folders. The destination
+  and repository folders are opened once and then used through that open
+  handle (restic is given the folder itself, not a path), so swapping
+  them for a link while a run is in progress doesn't redirect it either;
+  `--verify` goes through the same checks. A refused destination or
+  repository fails the run with the usual alerts; a link planted at the
+  log's name only costs that run its log file. The one thing not covered:
+  a link swapped in *inside* the repository's `data/` folders during a
+  run (restic names those files after their content hash).
 - **Verified bundled restic binary**: the static fallback binary is
   downloaded from the official GitHub releases and checked against its
   published SHA256 before any use.
@@ -427,6 +433,15 @@ disk did: leave it in place and inspect where it points before doing
 anything else. If it is your own (for example a link on the disk itself
 used as `TB_BACKUP_DIR`), set `TB_BACKUP_DIR` to the real directory
 instead. Links stored on `/` or in your home are still followed.
+
+**`❌ The directory 'restic-repo' is not empty but holds no restic 'config' file`**
+The repository folder contains data (`keys/`, `data/`...) but its `config`
+file is missing: a partial copy or a half-restored repository. The script
+refuses to start a second, unrelated repository next to it. Restore the
+missing `config` file from wherever the repository was copied or restored
+from, then run again. Only if that repository is really lost, move the
+folder aside to start a new one (a new repository cannot read the old
+backups).
 
 **The disk is never detected**
 ```bash

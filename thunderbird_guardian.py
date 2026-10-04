@@ -21,6 +21,7 @@ USAGE:
 """
 
 import os
+import re
 import sys
 import errno
 import html
@@ -374,56 +375,91 @@ def open_backup_dir(path: Path, create: bool = True) -> int:
         raise
 
 
-def check_repo_not_linked(dest_fd: int) -> None:
-    """restic follows symlinks in its repository path: a `restic-repo`
-    planted as a link (or holding linked subdirectories, which restic
-    creates new files in) would send the whole encrypted backup to a
-    directory chosen by whoever can write to the disk. Refuse those before
-    any restic command runs. restic itself names every file inside after
-    its content hash, so only directory-level links matter here."""
-    repo_name = "restic-repo"
+REPO_NAME = "restic-repo"
+
+
+def _linked_entries(dir_fd: int) -> list:
+    with os.scandir(dir_fd) as it:
+        return [e.name for e in it if e.is_symlink()]
+
+
+def open_repo_fd(dest_fd: int, create: bool = False):
+    """Opens the restic repository directory and returns a fd for it (None
+    if it doesn't exist and `create` is False; with `create`, an empty one
+    is made first, restic accepts an empty directory for `init`).
+
+    restic follows symlinks in its repository path: a `restic-repo` planted
+    as a link (or holding linked subdirectories, which restic creates new
+    files in) would send the whole encrypted backup to a directory chosen by
+    whoever can write to the disk. Both are refused here, before any restic
+    command runs. restic itself names every file inside after its content
+    hash, so only directory-level links matter.
+
+    The returned fd is the directory itself, opened with O_NOFOLLOW: callers
+    hand restic /proc/self/fd/<fd> (see repo_path()) instead of a path, so
+    swapping `restic-repo` or any parent of it for a link after this point
+    can't redirect restic's writes either. Only a link swapped in *inside*
+    the repository (data/xx) while the run is in progress is not covered."""
     try:
-        st = os.stat(repo_name, dir_fd=dest_fd, follow_symlinks=False)
+        st = os.stat(REPO_NAME, dir_fd=dest_fd, follow_symlinks=False)
     except FileNotFoundError:
-        return
+        if not create:
+            return None
+        try:
+            os.mkdir(REPO_NAME, 0o700, dir_fd=dest_fd)
+        except FileExistsError:
+            pass
+        st = os.stat(REPO_NAME, dir_fd=dest_fd, follow_symlinks=False)
     if stat.S_ISLNK(st.st_mode):
         raise RuntimeError(
-            f"Refusing to use '{repo_name}': it is a symbolic link, not the "
+            f"Refusing to use '{REPO_NAME}': it is a symbolic link, not the "
             "repository directory itself."
         )
     if not stat.S_ISDIR(st.st_mode):
-        return
+        raise RuntimeError(f"'{REPO_NAME}' exists but is not a directory.")
 
-    def linked_entries(dir_fd: int) -> list:
-        with os.scandir(dir_fd) as it:
-            return [e.name for e in it if e.is_symlink()]
-
-    repo_fd = os.open(repo_name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dest_fd)
     try:
-        linked = linked_entries(repo_fd)
+        repo_fd = os.open(REPO_NAME, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dest_fd)
+    except OSError as e:
+        # Linux reports a link opened with O_DIRECTORY|O_NOFOLLOW as ENOTDIR
+        # (ELOOP without O_DIRECTORY): both mean it was swapped for a link.
+        if e.errno in (errno.ELOOP, errno.ENOTDIR):
+            raise RuntimeError(
+                f"Refusing to use '{REPO_NAME}': it became a symbolic link while "
+                "the backup was starting."
+            ) from e
+        raise
+    try:
+        linked = _linked_entries(repo_fd)
         try:
             data_fd = os.open("data", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=repo_fd)
         except (FileNotFoundError, NotADirectoryError):
             data_fd = None
         except OSError as e:
-            if e.errno != errno.ELOOP:
+            if e.errno not in (errno.ELOOP, errno.ENOTDIR):
                 raise
-            data_fd = None  # already reported as a link by linked_entries()
+            data_fd = None  # already reported as a link by _linked_entries()
         if data_fd is not None:
             try:
-                linked += [f"data/{n}" for n in linked_entries(data_fd)]
+                linked += [f"data/{n}" for n in _linked_entries(data_fd)]
             finally:
                 os.close(data_fd)
-    finally:
+        if linked:
+            # The names are chosen by whoever planted the links: kept out of
+            # the message, which ends up in the desktop and e-mail alerts.
+            raise RuntimeError(
+                f"Refusing to use '{REPO_NAME}': it contains {len(linked)} symbolic "
+                "link(s) that would send restic's writes outside the backup disk. "
+                f"List them with: find '{REPO_NAME}' -maxdepth 2 -type l"
+            )
+    except BaseException:
         os.close(repo_fd)
-    if linked:
-        # The names are chosen by whoever planted the links: kept out of
-        # the message, which ends up in the desktop and e-mail alerts.
-        raise RuntimeError(
-            f"Refusing to use '{repo_name}': it contains {len(linked)} symbolic "
-            "link(s) that would send restic's writes outside the backup disk. "
-            f"List them with: find '{repo_name}' -maxdepth 2 -type l"
-        )
+        raise
+    return repo_fd
+
+
+def repo_path(repo_fd: int) -> Path:
+    return Path(f"/proc/self/fd/{repo_fd}")
 
 
 def check_disk_space(dest_dir: Path) -> None:
@@ -451,10 +487,16 @@ def run_restic(
     env = os.environ.copy()
     env["RESTIC_PASSWORD"] = password
 
+    # A repository given as /proc/self/fd/<n> (see open_repo_fd) only
+    # resolves in the child if that fd is inherited under the same number.
+    m = re.fullmatch(r"/proc/self/fd/(\d+)", str(repo))
+    pass_fds = (int(m.group(1)),) if m else ()
+
     result = subprocess.run(
         [restic_bin, "-r", str(repo)] + args,
-        env=env, capture_output=True, text=True, cwd=cwd
+        env=env, capture_output=True, text=True, cwd=cwd, pass_fds=pass_fds
     )
+    result.stderr = result.stderr.replace(str(repo), REPO_NAME)
     if check and result.returncode != 0:
         raise RuntimeError(f"restic {' '.join(args)} failed: {result.stderr.strip()}")
     return result
@@ -471,11 +513,22 @@ def ensure_repo_initialized(repo: Path, password: str) -> None:
     # throwaway-repository test, 2026-10-03). Say that instead.
     if (repo / "config").exists():
         raise RuntimeError(
-            f"The restic repository exists ({repo}) but could not be opened "
+            f"The restic repository exists ('{REPO_NAME}') but could not be opened "
             f"(restic: {result.stderr.strip()}). Most likely cause: the password in the "
             "keyring is not the one this repository was created with. Do NOT "
             "run --init with a new password: enter the original one (see "
             "Troubleshooting in README.md)."
+        )
+    # No `config` but not empty either (keys/, data/...: a partial copy, a
+    # half-restored repository): `restic init` there would start a second,
+    # unrelated repository next to the old data. Stop instead.
+    if repo.is_dir() and any(repo.iterdir()):
+        raise RuntimeError(
+            f"The directory '{REPO_NAME}' is not empty but holds no restic 'config' "
+            "file (partial copy or half-restored repository?). Refusing to run "
+            "'restic init' on it: restore the missing config file from the "
+            "repository's source, or move the directory aside to start a new "
+            "repository (a new repository cannot read the old backups)."
         )
     log.info("Initializing the restic repository...")
     run_restic(repo, password, ["init"])
@@ -733,7 +786,7 @@ def replace_file_in_dir(
         raise
 
 
-def write_restore_script(dest_fd: int, repo: Path) -> None:
+def write_restore_script(dest_fd: int, repo_name: str) -> None:
     """do_backup() backs up a RELATIVE path (cwd=parent) precisely so that
     restoring lands directly under $TARGET/<name>, never depending on an
     absolute path or a username. The search-based fallback stays as a
@@ -749,12 +802,12 @@ def write_restore_script(dest_fd: int, repo: Path) -> None:
     encoding = locale.getpreferredencoding(False)
     en_name = "RESTORE_EMERGENCY.sh"
     replace_file_in_dir(
-        dest_fd, en_name, _restore_script_en(repo.name, source_basename).encode(encoding), 0o700
+        dest_fd, en_name, _restore_script_en(repo_name, source_basename).encode(encoding), 0o700
     )
 
     fr_name = "RESTORE_EMERGENCY.fr.sh"
     replace_file_in_dir(
-        dest_fd, fr_name, _restore_script_fr(repo.name, source_basename).encode(encoding), 0o700
+        dest_fd, fr_name, _restore_script_fr(repo_name, source_basename).encode(encoding), 0o700
     )
 
     log.info(f"✅ Restore scripts up to date: {en_name}, {fr_name}")
@@ -839,20 +892,19 @@ def run_backup() -> None:
             f"attempts: {dest_dir.parent}"
         )
 
-    # Everything the run writes on the disk goes through this fd (log,
-    # restore scripts, docs) or through the real path it resolves to
-    # (restic), never through a symlink planted on the disk. Kept open for
-    # the whole process: the log handler writes through it.
+    # Everything the run writes on the disk goes through these fds (log,
+    # restore scripts, docs; restic gets the repository directory as
+    # /proc/self/fd/<n>), never through a path a symlink planted on the disk
+    # could redirect. Kept open for the whole process: the log handler
+    # writes through the first one.
     dest_fd = open_backup_dir(dest_dir)
-    real_dest = Path(os.readlink(f"/proc/self/fd/{dest_fd}"))
     attach_file_logging(dest_fd)
     log.info(f"✅ Destination: {dest_dir}")
 
-    check_disk_space(real_dest)
+    check_disk_space(Path(f"/proc/self/fd/{dest_fd}"))
 
-    check_repo_not_linked(dest_fd)
-    repo = real_dest / "restic-repo"
     password = get_password()
+    repo = repo_path(open_repo_fd(dest_fd, create=True))
 
     ensure_repo_initialized(repo, password)
     repo_healthy = check_repo(repo, password, deep=False)
@@ -868,7 +920,7 @@ def run_backup() -> None:
     else:
         log.warning("⚠️ Retention skipped: the repository failed the integrity check")
 
-    write_restore_script(dest_fd, repo)
+    write_restore_script(dest_fd, REPO_NAME)
     sync_docs_to_disk(dest_fd)
 
     elapsed = time.time() - start
@@ -921,16 +973,22 @@ def main():
 
         elif sys.argv[1] == "--verify":
             dest_dir = resolve_dest_dir()
-            repo = dest_dir / "restic-repo"
-            if not repo.exists():
-                log.error(f"❌ Repository not found: {repo}")
+            try:
+                repo_fd = open_repo_fd(open_backup_dir(dest_dir, create=False))
+            except FileNotFoundError:
+                repo_fd = None
+            except RuntimeError as e:
+                log.error(f"❌ {e}")
+                sys.exit(2)
+            if repo_fd is None:
+                log.error(f"❌ Repository not found: {dest_dir / REPO_NAME}")
                 sys.exit(1)
             try:
                 password = get_password()
             except RuntimeError as e:
                 log.error(f"❌ {e}")
                 sys.exit(2)
-            ok = check_repo(repo, password, deep=True)
+            ok = check_repo(repo_path(repo_fd), password, deep=True)
             sys.exit(0 if ok else 4)
 
         else:
