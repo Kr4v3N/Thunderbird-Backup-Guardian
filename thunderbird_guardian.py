@@ -62,6 +62,8 @@ class Config:
 
     KEYRING_SERVICE = "thunderbird_backup_guardian"
     KEYRING_USERNAME = "encryption_password"
+    KEYRING_RETRIES = 6
+    KEYRING_RETRY_DELAY = 10  # seconds
     MIN_PASSWORD_LENGTH = 8
 
     KEEP_DAILY = int(os.getenv("TB_KEEP_DAILY", "7"))
@@ -190,6 +192,76 @@ def init_password() -> str:
     return password
 
 
+def _run_quiet(cmd: list[str]) -> str:
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        return (r.stdout.strip() or r.stderr.strip()).replace("\n", " | ")
+    except Exception as e:  # noqa: BLE001 - diagnostics only
+        return f"<{type(e).__name__}: {e}>"
+
+
+def log_keyring_diagnostics() -> None:
+    """Logged when keyring hands back an empty password, to narrow down the
+    transient ksecretd failure (2026-09-22, 2026-11-09). Never logs the
+    secret itself, only its length. Every probe is wrapped: diagnostics
+    must never turn a retryable failure into a crash."""
+    lines = []
+    lines.append(f"backend={keyring.get_keyring().__class__.__module__}")
+    for var in ("DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR", "DISPLAY", "WAYLAND_DISPLAY"):
+        lines.append(f"{var}={'set' if os.environ.get(var) else 'MISSING'}")
+
+    # Same lookup path as keyring's SecretService backend, step by step, on
+    # a fresh D-Bus connection, to see which layer gives back nothing.
+    try:
+        import secretstorage
+        conn = secretstorage.dbus_init()
+        try:
+            coll = secretstorage.get_default_collection(conn)
+            lines.append(f"collection={coll.collection_path} label={coll.get_label()!r} locked={coll.is_locked()}")
+            items = list(coll.search_items({"service": Config.KEYRING_SERVICE,
+                                            "username": Config.KEYRING_USERNAME}))
+            lines.append(f"matching_items={len(items)}")
+            for i, item in enumerate(items[:3]):
+                t0 = time.monotonic()
+                secret_empty = not item.get_secret()
+                dt = time.monotonic() - t0
+                lines.append(
+                    f"item[{i}] locked={item.is_locked()} secret_empty={secret_empty} "
+                    f"get_secret_s={dt:.2f} modified={datetime.fromtimestamp(item.get_modified()).isoformat(timespec='seconds')}"
+                )
+        finally:
+            conn.close()
+    except Exception as e:  # noqa: BLE001 - diagnostics only
+        lines.append(f"secretstorage_probe_error={type(e).__name__}: {e}")
+
+    lines.append(f"ksecretd={_run_quiet(['ps', '-o', 'pid=,lstart=', '-C', 'ksecretd']) or 'NOT RUNNING'}")
+    lines.append(f"kwalletd6={_run_quiet(['ps', '-o', 'pid=,lstart=', '-C', 'kwalletd6']) or 'NOT RUNNING'}")
+
+    # A wallet file rewritten seconds before the read (another app saving a
+    # secret) would point at a read/write race inside ksecretd.
+    wallet_dir = Path.home() / ".local" / "share" / "kwalletd"
+    try:
+        for f in sorted(wallet_dir.glob("kdewallet*")):
+            age = time.time() - f.stat().st_mtime
+            lines.append(f"{f.name} modified {age:.0f}s ago")
+    except OSError as e:
+        lines.append(f"wallet_dir_error={e}")
+
+    sessions = _run_quiet(["loginctl", "list-sessions", "--no-legend"])
+    lines.append(f"sessions={sessions}")
+    for sid in re.findall(r"^\s*(\S+)\s+\d+\s", sessions.replace(" | ", "\n"), re.M):
+        lines.append(f"session {sid}: " + _run_quiet(
+            ["loginctl", "show-session", sid, "-p", "Active", "-p", "State",
+             "-p", "LockedHint", "-p", "IdleHint", "-p", "Type"]))
+
+    lines.append("ksecretd journal (last 5 min): " + (_run_quiet(
+        ["journalctl", "--user", "--since", "-5min", "--no-pager", "-o", "short-iso",
+         "_COMM=ksecretd"]) or "empty"))
+
+    for line in lines:
+        log.warning(f"   keyring diag | {line}")
+
+
 def get_password() -> str:
     # Raises RuntimeError rather than sys.exit() on failure: run_backup()'s
     # caller (main()) only catches Exception, not the BaseException-rooted
@@ -198,24 +270,44 @@ def get_password() -> str:
     # by code review 2026-09-22, alongside the fix below). --verify calls
     # this outside that try/except and handles RuntimeError locally to
     # keep its own clean exit behavior.
-    password = keyring.get_password(Config.KEYRING_SERVICE, Config.KEYRING_USERNAME)
-    if password is None:
-        raise RuntimeError(f"Password not initialized. Run: python3 {sys.argv[0]} --init")
-    if not password:
-        # keyring can return "" instead of None or raising when the
-        # SecretService backend can't actually unlock the collection in
-        # this context (e.g. no active/unlocked session at cron time):
-        # confirmed 2026-09-22, same env vars as an interactive run, valid
-        # password still in the keyring, yet this run got back "". Left
-        # unchecked, an empty password silently reaches restic and fails
-        # two layers down with a cryptic "empty password" error instead of
-        # pointing at the real cause.
-        raise RuntimeError(
-            "Keyring returned an empty password (not None). The SecretService "
-            "collection was likely locked/unreachable in this run's session, "
-            "not a missing password."
-        )
-    return password
+    # keyring can return "" instead of None or raising when the
+    # SecretService backend (ksecretd under KDE) fails to hand back the
+    # secret: confirmed 2026-09-22 and again 2026-11-09, both at the 18:40
+    # cron run, valid password still in the keyring, collection unlocked,
+    # session open, and the very next manual reads (and the next day's
+    # cron) got the real password. The failure is transient,
+    # so retry with a fresh D-Bus connection (keyring opens one per call)
+    # before giving up. Left unchecked, an empty password silently reaches
+    # restic and fails two layers down with a cryptic "empty password"
+    # error instead of pointing at the real cause.
+    for attempt in range(1, Config.KEYRING_RETRIES + 1):
+        t0 = time.monotonic()
+        password = keyring.get_password(Config.KEYRING_SERVICE, Config.KEYRING_USERNAME)
+        elapsed = time.monotonic() - t0
+        if password == "":
+            log.warning(f"⚠️ keyring.get_password() took {elapsed:.2f}s and returned an empty string")
+            # Full probe on the first and last empty result only: enough to
+            # compare the state when it starts and when it gives up, without
+            # flooding the log on every retry.
+            if attempt in (1, Config.KEYRING_RETRIES):
+                log_keyring_diagnostics()
+        if password is None:
+            raise RuntimeError(f"Password not initialized. Run: python3 {sys.argv[0]} --init")
+        if password:
+            if attempt > 1:
+                log.info(f"✅ Keyring returned the password on attempt {attempt}")
+            return password
+        if attempt < Config.KEYRING_RETRIES:
+            log.warning(
+                f"⚠️ Keyring returned an empty password (attempt {attempt}/"
+                f"{Config.KEYRING_RETRIES}), retrying in {Config.KEYRING_RETRY_DELAY}s"
+            )
+            time.sleep(Config.KEYRING_RETRY_DELAY)
+    raise RuntimeError(
+        f"Keyring returned an empty password (not None) {Config.KEYRING_RETRIES} times "
+        "in a row. The SecretService collection was likely locked/unreachable in "
+        "this run's session, not a missing password."
+    )
 
 
 # =============================================================================
