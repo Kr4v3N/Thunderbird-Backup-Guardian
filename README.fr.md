@@ -577,7 +577,7 @@ seulement `None` (confirmé le 22/09/2026 : le backend SecretService peut
 renvoyer un secret vide au lieu de lever une erreur quand il ne peut pas
 déverrouiller la collection dans la session d'un run cron), et lève une
 exception plutôt que de quitter directement, pour qu'un échec en cron
-déclenche quand même l'alerte desktop/e-mail. Depuis le 09/11/2026 (même
+déclenche quand même l'alerte desktop/e-mail. Depuis le 09/11/2026, après le tag v22.1 et pas encore dans une release taguée (même
 échec observé une deuxième fois, transitoire : les lectures suivantes
 renvoyaient le vrai mot de passe), un résultat vide est retenté jusqu'à 6
 fois, à 10 secondes d'intervalle, avant de déclarer le run en échec, et le

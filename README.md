@@ -564,7 +564,7 @@ string from the system keyring as a real failure, not just `None`
 (confirmed 2026-09-22: the SecretService backend can hand back an empty
 secret instead of raising when it can't unlock the collection in a cron
 run's session), and raises instead of exiting directly so a cron-time
-failure still triggers the desktop/e-mail alert. Since 2026-11-09 (same
+failure still triggers the desktop/e-mail alert. Since 2026-11-09, after the v22.1 tag and not yet in a tagged release (same
 failure seen a second time, transient: the next reads returned the real
 password), an empty result is retried up to 6 times, 10 seconds apart,
 before the run is declared failed, and the log records a diagnostic of the
